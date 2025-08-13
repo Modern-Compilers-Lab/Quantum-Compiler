@@ -2,9 +2,9 @@ import islpy as isl
 import networkx as nx
 import itertools
 from collections import defaultdict
-from src.qlosure.python.graph.dag import DAG
-from src.qlosure.python.utils.isl_to_python import isl_set_to_python_set
-from src.qlosure.python.utils.python_to_isl import dict_to_isl_map
+from src.graph.dag import DAG
+from src.utils.isl_to_python import isl_set_to_python_set
+from src.utils.python_to_isl import dict_to_isl_map
 import time
 
 

@@ -1,4 +1,4 @@
-from src.qlosure.python.utils.python_to_isl import list_to_isl_set
+from src.utils.python_to_isl import list_to_isl_set
 from collections import deque
 import random
 import time

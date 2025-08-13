@@ -1,10 +1,10 @@
-from src.qlosure.python.utils.circuit_utils import *
-from src.qlosure.python.mapping.heuristic import *
-from src.qlosure.python.utils.isl_data_loader import *
-from src.qlosure.python.utils.isl_to_python import *
-from src.qlosure.python.utils.python_to_isl import *
-from src.qlosure.python.graph.graph import *
-from src.qlosure.python.mapping.mapping import *
+from src.utils.circuit_utils import *
+from src.mapping.heuristic import *
+from src.utils.isl_data_loader import *
+from src.utils.isl_to_python import *
+from src.utils.python_to_isl import *
+from src.graph.graph import *
+from src.mapping.mapping import *
 
 import islpy as isl
 import random
