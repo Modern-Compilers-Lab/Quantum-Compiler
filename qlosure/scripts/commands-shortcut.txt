@@ -1,0 +1,2 @@
+sbatch --job-name=queko-bss-16qbt scripts/bechmark_runner.sh
+
