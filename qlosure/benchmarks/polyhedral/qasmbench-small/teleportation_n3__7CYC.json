@@ -1,0 +1,25 @@
+{
+    "Domain": "{ S4[i0, 0] : 0 <= i0 <= 1; S3[0]; S0[i0, i1] : i0 >= 0 and 0 <= i1 <= 1 - i0; S2[i0, i1] : i0 >= 0 and 0 <= i1 <= 1 - i0; S1[i0, i1] : i0 >= 0 and 0 <= i1 <= 1 - i0 }",
+    "Read": "{ S4[i0, i1 = 0] -> q[o0] : 0 <= i0 <= 1 and -i0 < o0 <= 2 - i0; S3[i0 = 0] -> q[0]; S1[i0, i1] -> q[2i1] : i0 >= 0 and 0 <= i1 <= 1 - i0; S2[i0, i1] -> q[2i1] : i0 >= 0 and 0 <= i1 <= 1 - i0; S0[i0, i1] -> q[2i1] : i0 >= 0 and 0 <= i1 <= 1 - i0 }",
+    "Write": "{ S4[i0, i1 = 0] -> q[1] : 0 <= i0 <= 1; S3[i0 = 0] -> q[0]; S1[i0, i1] -> q[2i1] : i0 >= 0 and 0 <= i1 <= 1 - i0; S2[i0, i1] -> q[2i1] : i0 >= 0 and 0 <= i1 <= 1 - i0; S0[i0, i1] -> q[2i1] : i0 >= 0 and 0 <= i1 <= 1 - i0 }",
+    "Call": "{ S4[i0, i1 = 0] -> [2 - 2i0, 1] : 0 <= i0 <= 1; S1[i0, i1] -> [2i1] : i0 >= 0 and 0 <= i1 <= 1 - i0; S0[i0, i1] -> [2i1] : i0 >= 0 and 0 <= i1 <= 1 - i0; S3[i0 = 0] -> [0]; S2[i0, i1] -> [2i1] : i0 >= 0 and 0 <= i1 <= 1 - i0 }",
+    "RecoveredSchedule": "{ S4[i0, 0] -> [7 + i0] : 0 <= i0 <= 1; S1[1, 0] -> [10]; S1[0, 1] -> [5]; S1[0, 0] -> [1]; S0[1, 0] -> [9]; S0[0, 1] -> [4]; S0[0, 0] -> [0]; S3[0] -> [3]; S2[1, 0] -> [11]; S2[0, 1] -> [6]; S2[0, 0] -> [2] }",
+    "AccessRead": null,
+    "AccessWrite": null,
+    "Stats": {
+        "Qops": 12
+    },
+    "DomainBreakdown": {
+        "1": 1,
+        "2": 1,
+        "3": 3
+    },
+    "Timing": {
+        "Reconstruction": 75,
+        "Scheduling": 0,
+        "Total": 75
+    },
+    "Chunk": "100",
+    "Search": "0",
+    "qasm_code": "OPENQASM 2.0;\ninclude \"qelib1.inc\";\nqreg q[3];\nrz(-pi/2) q[0];\nsx q[0];\nrz(3*pi/4) q[0];\nsx q[0];\nrz(pi/2) q[2];\nsx q[2];\nrz(pi/2) q[2];\ncx q[2],q[1];\ncx q[0],q[1];\nrz(pi/2) q[0];\nsx q[0];\nrz(pi/2) q[0];"
+}

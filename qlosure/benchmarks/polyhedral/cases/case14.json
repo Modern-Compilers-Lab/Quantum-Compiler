@@ -1,0 +1,22 @@
+{
+    "Domain": "{ S5[0]; S0[i0, i1] : 0 <= i0 <= 1 and 0 <= i1 <= 2 - i0; S4[0]; S1[i0, i1] : 0 <= i0 <= 1 and 0 <= i1 <= 2 - i0 }",
+    "Read": "{ S4[i0 = 0] -> q[0]; S5[i0 = 0] -> q[2]; S1[i0, i1] -> q[i1] : 0 <= i0 <= 1 and 0 <= i1 <= 2 - i0; S0[i0, i1] -> q[2 + i1] : 0 <= i0 <= 1 and 0 <= i1 <= 2 - i0 }",
+    "Write": "{ S4[i0 = 0] -> q[0]; S5[i0 = 0] -> q[2]; S1[i0, i1] -> q[i1] : 0 <= i0 <= 1 and 0 <= i1 <= 2 - i0; S0[i0, i1] -> q[2 + i1] : 0 <= i0 <= 1 and 0 <= i1 <= 2 - i0 }",
+    "Call": "{ S1[i0, i1] -> [i1] : 0 <= i0 <= 1 and 0 <= i1 <= 2 - i0; S0[i0, i1] -> [2 + i1] : 0 <= i0 <= 1 and 0 <= i1 <= 2 - i0; S5[i0 = 0] -> [2]; S4[i0 = 0] -> [0] }",
+    "RecoveredSchedule": "{ S1[1, i1] -> [6 + i1] : 0 <= i1 <= 1; S1[0, i1] -> [i1] : 0 <= i1 <= 1; S1[0, 2] -> [3]; S0[1, i1] -> [8 + i1] : 0 <= i1 <= 1; S0[0, i1] -> [3 + i1] : 0 < i1 <= 2; S0[0, 0] -> [2]; S5[0] -> [11]; S4[0] -> [10] }",
+    "Stats": {
+        "Qops": 12
+    },
+    "DomainBreakdown": {
+        "1": 2,
+        "5": 2
+    },
+    "Timing": {
+        "Reconstruction": 113,
+        "Scheduling": 0,
+        "Total": 113
+    },
+    "Chunk": "1000",
+    "Search": "0",
+    "qasm_code": "OPENQASM 2.0;\ninclude \"qelib1.inc\";\nqreg q[9];\n\nh q[0];\nh q[1];\nx q[2];\nh q[2];\nx q[3];\nx q[4];\n\nh q[0];\nh q[1];\nx q[2];\nx q[3];\n\nh q[0];\nx q[2];"
+}

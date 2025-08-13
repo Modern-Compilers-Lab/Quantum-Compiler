@@ -1,0 +1,15 @@
+{
+    "Domain": null,
+    "Read": null,
+    "Write": null,
+    "Call": null,
+    "RecoveredSchedule": null,
+    "AccessRead": null,
+    "AccessWrite": null,
+    "Stats": {},
+    "DomainBreakdown": {},
+    "Timing": {},
+    "Chunk": "100",
+    "Search": "0",
+    "qasm_code": "with open(\"./cases/bssfull.qasm\", \"r\") as file_input:\n    with open(\"./cases/bss100.qasm\", \"w\") as output: \n        for line in file_input:\n            if (not line.startswith(\"cx\")):\n                output.write(line)"
+}

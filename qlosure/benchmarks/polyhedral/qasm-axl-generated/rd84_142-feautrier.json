@@ -1,0 +1,15 @@
+{
+    "Domain": null,
+    "Read": null,
+    "Write": null,
+    "Call": null,
+    "RecoveredSchedule": null,
+    "AccessRead": null,
+    "AccessWrite": null,
+    "Stats": {},
+    "DomainBreakdown": {},
+    "Timing": {},
+    "Chunk": "100",
+    "Search": "0",
+    "qasm_code": "OPENQASM 2.0;\ninclude \"qelib1.inc\";\nqreg qureg[15];\nccx qureg[0],qureg[1],qureg[8];\nccx qureg[2],qureg[8],qureg[9];\ncx qureg[0],qureg[1];\nccx qureg[3],qureg[9],qureg[10];\nccx qureg[1],qureg[2],qureg[8];\ncx qureg[1],qureg[2];\nccx qureg[4],qureg[10],qureg[11];\nccx qureg[3],qureg[8],qureg[9];\nccx qureg[2],qureg[3],qureg[8];\nccx qureg[5],qureg[11],qureg[12];\nccx qureg[4],qureg[9],qureg[10];\ncx qureg[2],qureg[3];\nccx qureg[6],qureg[12],qureg[13];\nccx qureg[4],qureg[8],qureg[9];\nccx qureg[3],qureg[4],qureg[8];\nccx qureg[7],qureg[13],qureg[14];\nccx qureg[5],qureg[9],qureg[10];\ncx qureg[3],qureg[4];\nccx qureg[5],qureg[8],qureg[9];\nccx qureg[4],qureg[5],qureg[8];\nccx qureg[6],qureg[9],qureg[10];\ncx qureg[4],qureg[5];\nccx qureg[6],qureg[8],qureg[9];\nccx qureg[5],qureg[6],qureg[8];\nccx qureg[7],qureg[9],qureg[10];\ncx qureg[5],qureg[6];\nccx qureg[6],qureg[7],qureg[8];\ncx qureg[6],qureg[7];\n"
+}

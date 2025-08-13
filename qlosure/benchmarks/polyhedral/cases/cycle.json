@@ -1,0 +1,15 @@
+{
+    "Domain": null,
+    "Read": null,
+    "Write": null,
+    "Call": null,
+    "RecoveredSchedule": null,
+    "AccessRead": null,
+    "AccessWrite": null,
+    "Stats": {},
+    "DomainBreakdown": {},
+    "Timing": {},
+    "Chunk": "100",
+    "Search": "0",
+    "qasm_code": "OPENQASM 2.0;\ninclude \"qelib1.inc\";\nqreg q[3];\nh q[0];\ncx q[0], q[1];\nh q[1];\n\n0 -> 1\n1 -> 2\n\n0[0] -> 1\n1 -> 0[1]"
+}

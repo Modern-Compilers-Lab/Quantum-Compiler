@@ -1,0 +1,22 @@
+{
+    "Domain": "{ S0[i0, i1] : i0 <= 1 and 0 <= i1 <= i0; S1[0] }",
+    "Read": "{ S1[i0 = 0] -> q[0]; S0[i0, i1] -> q[1 + i0 + i1] : i0 <= 1 and 0 <= i1 <= i0; S0[i0, i1] -> q[i0] : i0 <= 1 and 0 <= i1 <= i0 }",
+    "Write": "{ S1[i0 = 0] -> q[0]; S0[i0, i1] -> q[1 + i0 + i1] : i0 <= 1 and 0 <= i1 <= i0 }",
+    "Call": "{ S0[i0, i1] -> [i0, 1 + i0 + i1] : i0 <= 1 and 0 <= i1 <= i0; S1[i0 = 0] -> [0] }",
+    "RecoveredSchedule": "{ S0[1, i1] -> [2 + i1] : 0 <= i1 <= 1; S0[0, 0] -> [0]; S1[0] -> [1] }",
+    "Stats": {
+        "Qops": 4
+    },
+    "DomainBreakdown": {
+        "1": 1,
+        "3": 1
+    },
+    "Timing": {
+        "Reconstruction": 87,
+        "Scheduling": 0,
+        "Total": 87
+    },
+    "Chunk": "1000",
+    "Search": "0",
+    "qasm_code": "OPENQASM 2.0;\ninclude \"qelib1.inc\";\nqreg q[4];\ncx q[0], q[1];\nx q[0];\ncx q[1], q[2];\ncx q[1], q[3];"
+}
