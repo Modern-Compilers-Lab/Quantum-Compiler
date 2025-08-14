@@ -1,11 +1,16 @@
 import argparse
+import json
+import logging
+import os
+import time
+from pathlib import Path
+from typing import Dict, Tuple, Any
+
+from qiskit.qasm2 import dump
+
 from src.utils.isl_data_loader import json_file_to_isl
 from src.mapping.routing import Qlosure
 from qpu.src.load_backend import load_backend_edges
-import os
-import time
-from qiskit.qasm2 import dump
-import json
 
 
 # Argument parser setup
@@ -85,15 +90,15 @@ if args.competitors:
     cirq_results = run_cirq(data, edges, initial_mapping=args.initial)
     print("Running SABRE...")
     sabre_results = run_sabre(data, edges, layout=args.initial)
-    # print("Running QMAP...")
-    # qmap_results = run_qmap(data, edges, initial_mapping=args.initial)
+    print("Running QMAP...")
+    qmap_results = run_qmap(data, edges, initial_mapping=args.initial)
     print("Running Pytket...")
     pytket_results = run_pytket(data, edges, initial_mapping=args.initial)
 
     results["sabre"] = {"swaps": sabre_results["swaps"],
                         "depth": sabre_results["depth"]}
-    # results["qmap"] = {"swaps": qmap_results["swaps"],
-    #                    "depth": qmap_results["depth"]}
+    results["qmap"] = {"swaps": qmap_results["swaps"],
+                       "depth": qmap_results["depth"]}
     results["tket"] = {"swaps": pytket_results["swaps"],
                        "depth": pytket_results["depth"]}
     results["cirq"] = {"swaps": cirq_results["swaps"],
