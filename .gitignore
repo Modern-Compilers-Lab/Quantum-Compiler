@@ -62,3 +62,8 @@ venv.bak/
 # OS
 .DS_Store
 Thumbs.db
+
+
+# custom files
+# Qlosure specific
+tmp_results/
