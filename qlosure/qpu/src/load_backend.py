@@ -1,7 +1,7 @@
 import json
 import os
 
-TOPLOGIES_DIR = "hardware/topologies"
+TOPLOGIES_DIR = "qpu/topologies"
 
 BACKEND_FILE_MAP = {
     "fake_5q_v1": "fake_5q_v1.json",

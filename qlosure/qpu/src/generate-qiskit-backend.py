@@ -23,7 +23,7 @@ def save_backend_coupling_map(backend, backend_name, output_dir):
 
 
 def save_coupling_maps():
-    output_dir = "topologies"
+    output_dir = "qpu/topologies"
     os.makedirs(output_dir, exist_ok=True)
 
     print("\nProcessing real backends...")
