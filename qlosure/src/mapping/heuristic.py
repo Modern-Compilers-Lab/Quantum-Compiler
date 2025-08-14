@@ -57,7 +57,7 @@ def decay_poly_heuristic(front_layer, extended_layer, mapping, distance_matrix, 
     return H
 
 
-def closure_poly_heuristic(front_layer, extended_layer, mapping, distance_matrix, access, decay_parameter, deps_count, extended_layer_index, gate):
+def qlosure_poly_heuristic(front_layer, extended_layer, mapping, distance_matrix, access, decay_parameter, deps_count, extended_layer_index, gate):
     W = 1
     # 1) max decay
     max_decay = max(decay_parameter[gate[0]],
@@ -103,7 +103,7 @@ def closure_poly_heuristic(front_layer, extended_layer, mapping, distance_matrix
     return H
 
 
-def closure_poly_heuristic(front_layer, extended_layer, mapping, distance_matrix, access, decay_parameter, deps_count, extended_layer_index, gate):
+def qlosure_poly_heuristic(front_layer, extended_layer, mapping, distance_matrix, access, decay_parameter, deps_count, extended_layer_index, gate):
     max_decay = max(decay_parameter[gate[0]],
                     decay_parameter[gate[1]])
 

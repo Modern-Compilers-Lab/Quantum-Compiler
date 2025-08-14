@@ -99,7 +99,7 @@ def compute_dependencies_length(graph, predecessors,):
     return dependents_length
 
 
-def compute_dependencies_length_bitset(graph, predecessors):
+def compute_transitive_closure_bitset(graph, predecessors):
 
     all_nodes = list(graph.keys())
     index_of = {}
