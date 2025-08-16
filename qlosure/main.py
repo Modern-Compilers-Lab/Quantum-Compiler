@@ -23,7 +23,7 @@ parser.add_argument("--backend", type=str,
 parser.add_argument("--initial", type=str, default="trivial",
                     help="Initial mapping method")
 parser.add_argument("--verbose", type=int, default=1, help="Verbosity level")
-parser.add_argument("--heuristic", type=str, default="Qlosure",
+parser.add_argument("--heuristic", type=str, default="qlosure",
                     help="Heuristic to use for mapping")
 parser.add_argument("--num_iterations", type=int, default=1,
                     help="number of bidirectional passes")
