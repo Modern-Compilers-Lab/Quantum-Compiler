@@ -67,3 +67,5 @@ Thumbs.db
 # custom files
 # Qlosure specific
 tmp_results/
+
+qlosure/tmp_results/
