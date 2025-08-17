@@ -5,6 +5,8 @@ from collections import defaultdict
 from src.graph.dag import DAG
 from src.utils.isl_to_python import isl_set_to_python_set
 from src.utils.python_to_isl import dict_to_isl_map
+from qiskit import QuantumCircuit
+
 import time
 
 
@@ -161,3 +163,20 @@ def generate_dag(read, write, num_qubits, enforce_read_after_read=True, transiti
     dag = DAG(read_dependencies=read, write_dependencies=write, enforce_read_after_read=enforce_read_after_read,
               transitive_reduction=transitive_reduction, num_qubits=num_qubits)
     return dag.successors_2q, dag.predecessors_2q, dag.successors_full, dag.predecessors_full, dag.access2q
+
+
+def replay_gate_at(src: QuantumCircuit, idx: int, dest: QuantumCircuit):
+    """
+    Copy the gate at src.data[idx] into dest, using the same logical qubit/clbit indices.
+    Returns a dict with the gate type and the indices used.
+    """
+    inst, qargs, cargs = src.data[idx]
+
+    # Logical indices (stable across multi-register circuits)
+    qidxs = [q._index for q in qargs]
+    cidxs = [c._index for c in cargs]
+
+    # Append the *same* operation to the destination circuit
+    dest.append(inst.copy(), [dest.qubits[i]
+                for i in qidxs], [dest.clbits[i] for i in cidxs])
+    return {"type": inst.name, "qubits": qidxs, "clbits": cidxs}

@@ -51,6 +51,8 @@ class Qlosure():
 
         if with_circuit:
             self.circuit = QuantumCircuit(self.num_qubits - 1)
+            self.original_circuit = QuantumCircuit.from_qasm_str(
+                data.get("qasm_code", ""))
 
         self.results = {}
         self.instruction_times = defaultdict(int)
@@ -194,7 +196,8 @@ class Qlosure():
             new_depth = self.qubit_depth.get(phys_q, 0) + 1
             self.qubit_depth[phys_q] = new_depth
             if self.with_circuit:
-                self.circuit.x(phys_q)
+                x = replay_gate_at(self.original_circuit, gate, self.circuit)
+
             return True
 
         q1, q2 = self.access[gate]
@@ -209,7 +212,7 @@ class Qlosure():
             self.qubit_depth[phys_q2] = new_depth
 
             if self.with_circuit:
-                self.circuit.cx(min(q1, q2), max(q1, q2))
+                x = replay_gate_at(self.original_circuit, gate, self.circuit)
 
             return True
         return False
