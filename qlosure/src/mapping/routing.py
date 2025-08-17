@@ -57,7 +57,7 @@ class Qlosure():
         self.results = {}
         self.instruction_times = defaultdict(int)
 
-    def run(self, heuristic_method="Qlosure", enforce_read_after_read=True, transitive_reduction=True, initial_mapping_method="sabre", dag_mode="default", num_iter=1, param=10, verbose=0):
+    def run(self, heuristic_method="Qlosure", enforce_read_after_read=True, transitive_reduction=True, initial_mapping_method="sabre", dag_mode="default", num_iter=1, param=5, verbose=0):
         """
         Execute the mapping/scheduling loop and return (min_swaps, min_depth, exec_time).
 

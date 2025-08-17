@@ -50,17 +50,17 @@ pip install -r requirements.txt
 ### Run on a single circuit (QUEKO 16 qubits) with the IBM Sherbrooke backend
 
 ```bash
-python main.py --circuit=benchmarks/polyhedral/queko-bss-16qbt/16QBT_100CYC_QSE_0.json --backend=ibm_sherbrooke
+python run_circuit.py --circuit=benchmarks/polyhedral/queko-bss-16qbt/16QBT_100CYC_QSE_0.json --backend=ibm_sherbrooke
 ```
 
 ### Run the a 54-qubit QUEKO circuit with multiple iterations (e.g., 3 forward/backward passes) to obtain a good initial mapping
 
 ```bash
-python main.py --circuit=benchmarks/polyhedral/queko-bss-54qbt/54QBT_100CYC_QSE_0.json --backend=ibm_sherbrooke --num_iterations=3
+python run_circuit.py --circuit=benchmarks/polyhedral/queko-bss-54qbt/54QBT_100CYC_QSE_0.json --backend=ibm_sherbrooke --num_iterations=3
 ```
 
 ### Run the circuit and also compare against competitors/baselines
 
 ```bash
-python main.py --circuit=benchmarks/polyhedral/queko-bss-54qbt/54QBT_100CYC_QSE_0.json --backend=ibm_sherbrooke --competitors
+python run_circuit.py --circuit=benchmarks/polyhedral/queko-bss-54qbt/54QBT_100CYC_QSE_0.json --backend=ibm_sherbrooke --competitors
 ```
