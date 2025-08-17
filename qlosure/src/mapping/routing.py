@@ -196,7 +196,7 @@ class Qlosure():
             new_depth = self.qubit_depth.get(phys_q, 0) + 1
             self.qubit_depth[phys_q] = new_depth
             if self.with_circuit:
-                x = replay_gate_at(self.original_circuit, gate, self.circuit)
+                replay_gate_at(self.original_circuit, gate, self.circuit)
 
             return True
 
@@ -212,7 +212,7 @@ class Qlosure():
             self.qubit_depth[phys_q2] = new_depth
 
             if self.with_circuit:
-                x = replay_gate_at(self.original_circuit, gate, self.circuit)
+                replay_gate_at(self.original_circuit, gate, self.circuit)
 
             return True
         return False
@@ -327,8 +327,7 @@ class Qlosure():
         return 1
 
     def _apply_layered_qlosure_heuristic(self, param):
-        # print("dag : ",self.dag_dependencies_count)
-        # print("distance matrix : ",self.distance_matrix)
+
         logical_qubits = [
             q for gate in self.front_layer for q in self.access2q[gate]]
         physical_qubits = set(self.mapping_dict[q] for q in logical_qubits)
@@ -340,22 +339,18 @@ class Qlosure():
 
         candidate_swaps = generate_swap_candidates(
             physical_qubits, self.backend)
-        # print("swaps candidates", candidate_swaps)
+
         heuristic_score = {}
         for swap_gate in candidate_swaps:
             temp_mapping_dict = swap_logical_physical_mappings(
                 self.mapping_dict, self.reverse_mapping_dict, swap_gate
             )
-            # print("for swap gate", swap_gate)
-            score = layered_poly_closure_heuristic(self.front_layer, self.extended_layer, temp_mapping_dict,
+            score = layered_poly_qlosure_heuristic(self.front_layer, self.extended_layer, temp_mapping_dict,
                                                    self.distance_matrix, self.access2q, self.decay_parameter, self.dag_dependencies_count, extended_layer_index, swap_gate)
             heuristic_score[swap_gate] = score
 
-            # print("score", score)
-
         best_swap_gate = find_min_score_swap_gate(heuristic_score)
-        # print("best swap gate", best_swap_gate)
-        # print("------------------")
+
         if self.use_isl:
             self.isl_mapping = swap_logical_physical_isl_mapping(
                 self.isl_mapping, best_swap_gate)

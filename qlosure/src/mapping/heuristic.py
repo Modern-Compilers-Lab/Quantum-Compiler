@@ -1,8 +1,5 @@
-from src.utils.python_to_isl import list_to_isl_set
 from collections import deque
 import random
-import time
-import math
 from collections import defaultdict
 
 
@@ -119,29 +116,6 @@ def layered_poly_qlosure_heuristic(front_layer, extended_layer,
     return H
 
 
-def create_extended_successor_set(front_points, dag, access, extended_set_size=40):
-    extended_set_size = extended_set_size * 5
-
-    visited = set()
-    queue = deque(front_points)
-
-    while queue and len(visited) < extended_set_size:
-        current = queue.popleft()
-
-        if current in dag:
-            if len(access.get(current, [])) > 1:
-                visited.add(current)
-
-            for succ in dag[current]:
-                if succ not in visited:
-                    queue.append(succ)
-
-                    if len(visited) >= extended_set_size:
-                        break
-
-    return list(visited)
-
-
 def create_leveled_extended_successor_set(front_points, dag, access, extended_set_size=40):
     visited = []
     layer_index = {}
@@ -167,54 +141,6 @@ def create_leveled_extended_successor_set(front_points, dag, access, extended_se
     return visited, layer_index
 
 
-def get_all_predecessors(node, predecessors, visited=None):
-    if visited is None:
-        visited = set()
-    if node in visited:
-        return set()
-    visited.add(node)
-    preds = set(predecessors.get(node, []))
-    for p in predecessors.get(node, []):
-        preds |= get_all_predecessors(p, predecessors, visited)
-    return preds
-
-
-def create_lookahead_path_set(front_points, dag, predecessors, lookahead_path_size=20):
-
-    def dfs_paths(node, depth):
-
-        if depth >= lookahead_path_size:
-            return [[node]]
-        successors = list(dag[node])
-
-        valid_successors = [succ for succ in successors if len(
-            predecessors.get(succ, [])) == 1]
-        if not valid_successors:
-            return [[node]]
-        paths = []
-        for succ in valid_successors:
-            for sub_path in dfs_paths(succ, depth + 1):
-                paths.append([node] + sub_path)
-        return paths
-
-    all_paths = []
-
-    for front in front_points:
-        paths_from_front = dfs_paths(front, 0)
-        for path in paths_from_front:
-
-            extended_nodes = set(path)
-
-            for node in path:
-                extended_nodes |= get_all_predecessors(node, predecessors)
-
-            extended_path = list(extended_nodes)
-            if front not in extended_path:
-                extended_path.insert(0, front)
-            all_paths.append(extended_path)
-    return all_paths
-
-
 def find_min_score_swap_gate(heuristic_score, epsilon=1e-10):
     random.seed(21)
     min_score = float('inf')
@@ -232,31 +158,3 @@ def find_min_score_swap_gate(heuristic_score, epsilon=1e-10):
 
     return random.choice(best_swaps)
     # return best_swaps[0] if best_swaps else None
-
-
-def order_extended_layer_from_successors(extended_layer, successors):
-
-    extended_set = set(extended_layer)
-
-    in_degree = {node: 0 for node in extended_layer}
-    for node in extended_layer:
-        for succ in successors.get(node, []):
-            if succ in extended_set:
-                in_degree[succ] += 1
-
-    layers = []
-    current_layer = [node for node in extended_layer if in_degree[node] == 0]
-
-    while current_layer:
-        layers.append(current_layer)
-        next_layer = []
-
-        for node in current_layer:
-            for succ in successors.get(node, []):
-                if succ in extended_set:
-                    in_degree[succ] -= 1
-                    if in_degree[succ] == 0:
-                        next_layer.append(succ)
-        current_layer = next_layer
-
-    return layers
