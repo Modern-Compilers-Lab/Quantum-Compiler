@@ -10,7 +10,8 @@ BACKEND_FILE_MAP = {
     "fake_127q_pulse_v1": "fake_127q_pulse_v1.json",
     "ibm_brisbane": "ibm_brisbane.json",
     "ibm_kyiv": "ibm_kyiv.json",
-    "ibm_sherbrooke": "ibm_sherbrooke.json"
+    "ibm_sherbrooke": "ibm_sherbrooke.json",
+    "ankaa": "Ankaa-3.json"
 }
 
 
