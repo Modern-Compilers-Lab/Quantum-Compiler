@@ -1,10 +1,13 @@
+import os
+import time
 import argparse
+import csv
+
+from qiskit.qasm2 import dump
 
 from src.utils.isl_data_loader import json_file_to_isl
 from src.mapping.routing import Qlosure
 from qpu.src.load_backend import load_backend_edges
-import os
-import csv
 
 
 parser = argparse.ArgumentParser(
@@ -31,7 +34,9 @@ edges = load_backend_edges(args.backend)
 all_files = os.listdir(benchmarks_folder_path)
 
 results_dir = "results/stats"
+circuit_dir = "results/circuits"
 os.makedirs(results_dir, exist_ok=True)
+os.makedirs(circuit_dir, exist_ok=True)
 
 csv_filename = f"{args.benchmark}_{args.backend}_{args.initial}.csv"
 csv_path = os.path.join(results_dir, csv_filename)
@@ -50,12 +55,19 @@ for file_idx, filename in enumerate(all_files):
         data = json_file_to_isl(file_path)
 
         poly_mapper = Qlosure(edges, data)
-        swap_count, depth, time = poly_mapper.run(initial_mapping_method=args.initial, verbose=args.verbose,
-                                                  heuristic_method=args.heuristic, num_iter=args.num_iterations)
+        swap_count, depth, execution_time = poly_mapper.run(initial_mapping_method=args.initial, verbose=args.verbose,
+                                                            heuristic_method=args.heuristic, num_iter=args.num_iterations)
+        timestamp = time.strftime("%Y%m%d-%H%M%S")
+        qasm_filename = f"{filename.split('.')[0]}_compiled_{timestamp}.qasm"
+        qasm_path = os.path.join(circuit_dir, qasm_filename)
+
+        with open(qasm_path, "w") as f:
+            dump(poly_mapper.circuit, f)
 
         # Write results to CSV
         with open(csv_path, 'a', newline='') as csvfile:
-            fieldnames = ['filename', 'final_depth', 'swap_count', 'runtime']
+            fieldnames = ['filename', 'final_depth',
+                          'swap_count', 'runtime', 'compiled_qasm_file']
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
 
             # Write header if file is empty
@@ -67,5 +79,6 @@ for file_idx, filename in enumerate(all_files):
                 'filename': filename,
                 'final_depth': depth,
                 'swap_count': swap_count,
-                'runtime': time
+                'runtime': execution_time,
+                'compiled_qasm_file': qasm_path
             })
