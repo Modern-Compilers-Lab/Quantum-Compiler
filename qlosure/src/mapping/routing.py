@@ -57,7 +57,7 @@ class Qlosure():
         self.results = {}
         self.instruction_times = defaultdict(int)
 
-    def run(self, heuristic_method="Qlosure", enforce_read_after_read=True, transitive_reduction=True, initial_mapping_method="sabre", dag_mode="default", num_iter=1, param=5, verbose=0):
+    def run(self, heuristic_method="Qlosure", enforce_read_after_read=True, transitive_reduction=True, initial_mapping_method="sabre", dag_mode="default", num_iter=1, look_ahead_param=5, verbose=0):
         """
         Execute the mapping/scheduling loop and return (min_swaps, min_depth, exec_time).
 
@@ -119,7 +119,7 @@ class Qlosure():
             self.qubit_depth = {q: 0 for q in range(self.num_qubits)}
             start = time()
             swap_count = self.execute_algorithm(
-                heuristic_method, param, verbose)
+                heuristic_method, look_ahead_param, verbose)
             exec_time = time()-start
             if i % 2 == 0:
                 if swap_count < min_swaps:
@@ -235,10 +235,10 @@ class Qlosure():
             return self._apply_qlosure_score_heuristic(param)
 
         if huristic_method == "layer_adjusted":
-            return self._apply_layered_closure_heuristic(param)
+            return self._apply_layered_qlosure_heuristic(param)
 
         if huristic_method == "distance_only":
-            return self._apply_distance_closure_heuristic()
+            return self._apply_distance_qlosure_heuristic()
 
     def _apply_qlosure_score_heuristic(self, param):
 
@@ -289,8 +289,7 @@ class Qlosure():
         physical_qubits = set(self.mapping_dict[q] for q in logical_qubits)
 
         self.extended_layer, extended_layer_index = create_leveled_extended_successor_set(
-            self.front_layer, self.dag2q_restricted, self.access2q, len(
-                physical_qubits)*5
+            self.front_layer, self.dag2q_restricted, self.access2q, 10
         )
 
         candidate_swaps = generate_swap_candidates(
@@ -333,8 +332,7 @@ class Qlosure():
         physical_qubits = set(self.mapping_dict[q] for q in logical_qubits)
 
         self.extended_layer, extended_layer_index = create_leveled_extended_successor_set(
-            self.front_layer, self.dag2q_restricted, self.access2q, len(
-                physical_qubits)*param
+            self.front_layer, self.dag2q_restricted, self.access2q, 10
         )
 
         candidate_swaps = generate_swap_candidates(

@@ -54,9 +54,12 @@ for file_idx, filename in enumerate(all_files):
 
         data = json_file_to_isl(file_path)
 
+        # look_ahead_param = 5 if "qasmebnch" in benchmarks_folder_path else 10
+        look_ahead_param = 5
+
         poly_mapper = Qlosure(edges, data)
         swap_count, depth, execution_time = poly_mapper.run(initial_mapping_method=args.initial, verbose=args.verbose,
-                                                            heuristic_method=args.heuristic, num_iter=args.num_iterations)
+                                                            heuristic_method=args.heuristic, num_iter=args.num_iterations, look_ahead_param=look_ahead_param)
         timestamp = time.strftime("%Y%m%d-%H%M%S")
         qasm_filename = f"{filename.split('.')[0]}_compiled_{timestamp}.qasm"
         qasm_path = os.path.join(circuit_dir, qasm_filename)

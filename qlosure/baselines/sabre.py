@@ -15,6 +15,7 @@ from qiskit.transpiler.passes import (
     TrivialLayout
 )
 
+
 def remove_classical_registers(qasm_str):
     lines = qasm_str.splitlines()
     cleaned_lines = []
@@ -27,6 +28,7 @@ def remove_classical_registers(qasm_str):
     return "\n".join(cleaned_lines)
 
 # Assume data["qasm_code"] contains your QASM code.
+
 
 def get_layout(coupling_map, circuit):
     sabre_layout = SabreLayout(coupling_map, seed=21)
@@ -103,5 +105,4 @@ def run_sabre(data, edges, layout="sabre", trial="single"):
     swap_count = swapped_circuit.count_ops().get("swap", 0)
     circuit_depth = swapped_circuit.depth()
 
-    return {"swaps": swap_count, "depth": circuit_depth,"circuit": swapped_circuit}    
-
+    return {"swaps": swap_count, "depth": circuit_depth, "circuit": swapped_circuit}

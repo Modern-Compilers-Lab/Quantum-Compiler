@@ -4,38 +4,34 @@ from collections import defaultdict
 
 
 def qlosure_poly_heuristic(front_layer, extended_layer, mapping, distance_matrix, access, decay_parameter, deps_count, extended_layer_index, gate):
-    max_decay = max(decay_parameter[gate[0]],
-                    decay_parameter[gate[1]])
+    W = 1
+    front_layer_size = len(front_layer)
+    extended_layer_size = len(extended_layer)
+
+    max_decay = max(decay_parameter[gate[0]], decay_parameter[gate[1]])
 
     f_distance = 0
+
     for g in front_layer:
         q1, q2 = access[g]
         Q1, Q2 = mapping[q1], mapping[q2]
         deps = deps_count[g]
-        f_distance += (deps+1) * distance_matrix[Q1][Q2]
-    f_norm = f_distance / len(front_layer) if front_layer else 0
 
-    layer_sums = defaultdict(float)
-    layer_counts = defaultdict(int)
+        f_distance += (deps+1) * distance_matrix[Q1][Q2]
+
+    e_distance = 0
     for g in extended_layer:
-        idx = extended_layer_index.get(g, 0)
         q1, q2 = access[g]
         Q1, Q2 = mapping[q1], mapping[q2]
+        layer_factor = extended_layer_index.get(g, 0) + 1
+
         deps = deps_count[g]
-        weight = (deps+1) * distance_matrix[Q1][Q2]
-        layer_sums[idx] += weight
-        layer_counts[idx] += 1
+        e_distance += (deps+1) * \
+            distance_matrix[Q1][Q2] * 1/layer_factor
 
-    if layer_counts:
-        layer_decay = {i: i for i in layer_counts}
-        e_norm = sum(
-            layer_sums[i] / (layer_counts[i] * (layer_decay[i]))
-            for i in layer_counts
-        )
-    else:
-        e_norm = 0
+    H = max_decay * (f_distance / front_layer_size + W *
+                     ((e_distance / extended_layer_size) if extended_layer_size else 0))
 
-    H = max_decay * (f_norm + e_norm)
     return H
 
 
