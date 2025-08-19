@@ -98,15 +98,15 @@ def plot_grouped_scatter_with_noise(data_grouped, xlabel, ylabel, title, fig_nam
     plt.tight_layout()
 
     os.makedirs("plots", exist_ok=True)
-    plt.savefig(f"plots/{fig_name}", dpi=300)
-    print(f"Figure 5 saved as: plots/{title.replace(' ', '_').lower()}.png")
+    plt.savefig(f"plots/FIGURE_5_{fig_name}", dpi=300)
+    print(f"Figure 5 saved as: plots/FIGURE_5_{fig_name}.png")
 
 
 def main():
     parser = argparse.ArgumentParser(
         description="Plot runtime for given benchmark across backends")
-    parser.add_argument("--benchmark", type=str, default="queko-bss-54qbt",
-                        help="Benchmark name (e.g., queko-bss-54qbt)")
+    parser.add_argument("--benchmark", type=str, default="queko-bss-16qbt",
+                        help="Benchmark name (e.g., queko-bss-16qbt)")
     args = parser.parse_args()
 
     # Load data from CSVs

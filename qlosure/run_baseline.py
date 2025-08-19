@@ -54,7 +54,7 @@ algorithms_to_run = ALGORITHMS if args.algorithm == "all" else [args.algorithm]
 # Create a CSV file for each algorithm selected
 csv_paths = {}
 for algorithm in algorithms_to_run:
-    csv_filename = f"{args.benchmark}_{args.backend}_{args.initial}_{algorithm}.csv"
+    csv_filename = f"{args.benchmark}_{args.backend}_trivial_{algorithm}.csv"
     csv_path = os.path.join(results_dir, csv_filename)
     if os.path.exists(csv_path):
         os.remove(csv_path)
