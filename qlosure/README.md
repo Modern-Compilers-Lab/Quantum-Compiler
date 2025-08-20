@@ -11,8 +11,6 @@ The main wrapper script, **`run_all_experiments.py`**, will execute the entire e
 -   **`run_circuit.py`**: to run Qlosure on a single circuit
 -   **`run_benchmark.py`**: to run Qlosure on all circuits of a specific benchmark
 
-A **`requirements.txt`** file is provided to set up the Python environment.
-
 ---
 
 ## Repository layout
