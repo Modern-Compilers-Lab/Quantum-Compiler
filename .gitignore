@@ -70,3 +70,6 @@ tmp_results/
 
 qlosure/tmp_results/
 qlosure/results/
+
+dynamic-qlosure/results/
+dynamic-qlosure/sabre_results/

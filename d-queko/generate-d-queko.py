@@ -122,7 +122,7 @@ def parse_mix(s: str) -> Dict[str, float]:
     Parse a probability mix like 'leaf:0.5,if:0.2,for:0.2,while:0.1'.
     Missing keys default to 0. Values are normalized to sum to 1.
     """
-    base = {"leaf": 0.6, "if": 0.2, "for": 0.15, "while": 0.05}
+    base = {"leaf": 0.3, "for": 0.25, "while": 0.25, "if": 0.2, }
     if not s:
         return base
     out = {k: 0.0 for k in base}
@@ -229,6 +229,21 @@ def load_device(backend_name: str) -> nx.Graph:
 
     raise KeyError(
         f"Unknown device '{backend_name}'. Use grid_MxN, a JSON path, or a known name in qpu/topologies/.")
+
+
+def generate_dense_backend(n: int, density: float = 0.8, seed: int = 42) -> nx.Graph:
+
+    G = nx.Graph()
+    G.add_nodes_from(range(n))
+
+    for i in range(n):
+        for j in range(i+1, n):
+            if random.random() < density:
+                G.add_edge(i, j)
+
+    print(G.edges())
+
+    return G
 
 
 def relabel_to_zero_based(G: nx.Graph) -> nx.Graph:
@@ -442,6 +457,21 @@ class LeafSpec(Node):
         self._plan_by_cycle: List[List[Tuple[str, int, Optional[int]]]] = []
         self._last_nodes: List[int] = []  # last chosen patch (for metadata)
 
+    def random_maximal_matching(self, G: nx.Graph, nodes, rng: random.Random):
+        # Build candidate edges inside the patch and randomize their order
+        edges = [(u, v) for u, v in G.subgraph(nodes).edges()]
+        rng.shuffle(edges)
+
+        used = set()
+        chosen = []
+        for u, v in edges:
+            if u in used or v in used:
+                continue
+            chosen.append((u, v))
+            used.add(u)
+            used.add(v)
+        return chosen  # list of disjoint edges (a randomized maximal matching)
+
     def realize(self, ctx: EmitContext, leaf_rng: random.Random, avoid: Optional[set] = None) -> set:
         # Reset plan for this replicate
         self._plan_by_cycle = []
@@ -450,6 +480,7 @@ class LeafSpec(Node):
             avoid=(avoid or set()), min_dist=self.conflict_level
         )
         patchG = self.device.subgraph(self._last_nodes).copy()
+
         n = len(self._last_nodes)
         target_2q = max(0, int(round(self.beta * n / 2.0)))
         target_1q = max(0, int(round(self.alpha * n)))
@@ -459,7 +490,8 @@ class LeafSpec(Node):
         for _ in range(self.depth):
             cycle_ops: List[Tuple[str, int, Optional[int]]] = []
             temp = nx.Graph(patchG)
-            matching = list(maximal_matching(temp))
+            matching = list(self.random_maximal_matching(
+                temp, self._last_nodes, leaf_rng))
             leaf_rng.shuffle(matching)
             chosen_2q = matching[:target_2q]
 
@@ -633,12 +665,12 @@ class WhileLoop(Node):
 
 @dataclass
 class GenParams:
+    nbQubits: int
     device: nx.Graph
     seed: int
     # Leaf defaults
     leaf_depth_rng: Tuple[int, int]
     leaf_density: Tuple[float, float]
-    leaf_subgraph_size_rng: Tuple[int, int]
     gates_1q: List[str]
     gates_2q: List[str]
     # Structure knobs
@@ -663,18 +695,44 @@ class ProgramBuilder:
     def _rand_cond_qubit(self) -> int:
         return self.rng_shape.randrange(0, self.G.number_of_nodes())
 
-    def _choose_type(self) -> str:
+    def _choose_type(self, parent_type: Optional[str]) -> str:
         r = self.rng_shape.random()
+
+        node_types = ["leaf", "if", "for", "while"]
+
         acc = 0.0
-        for k in ("leaf", "if", "for", "while"):
-            acc += self.P.mix.get(k, 0.0)
+        probs = self.P.mix
+        if parent_type == "if":
+            probs = probs.copy()
+            for node_type in node_types:
+                if node_type == "if":
+                    probs[node_type] = 0.0
+                else:
+                    probs[node_type] /= (1.0 - self.P.mix.get("if", 0.0))
+        elif parent_type == "while":
+            probs = probs.copy()
+            for node_type in node_types:
+                if node_type == "while":
+                    probs[node_type] = 0.0
+                else:
+                    probs[node_type] /= (1.0 - self.P.mix.get("while", 0.0))
+        elif parent_type == "for":
+            probs = probs.copy()
+            for node_type in node_types:
+                if node_type == "for":
+                    probs[node_type] = 0.0
+                else:
+                    probs[node_type] /= (1.0 - self.P.mix.get("for", 0.0))
+        for k in node_types:
+            acc += probs.get(k, 0.0)
             if r <= acc:
+                if k == "if":
+                    print("choosing IF")
                 return k
         return "leaf"
 
     def _make_leaf_spec(self, name: str) -> LeafSpec:
-        size = choose_from_range_rng(
-            self.rng_shape, *self.P.leaf_subgraph_size_rng, True)
+        size = self.P.nbQubits
         depth = choose_from_range_rng(
             self.rng_shape, *self.P.leaf_depth_rng, True)
         alpha, beta = self.P.leaf_density
@@ -690,7 +748,7 @@ class ProgramBuilder:
             name=name
         )
 
-    def _build_nested_seq(self, level: int, tag: str) -> Node:
+    def _build_nested_seq(self, level: int, tag: str, parent_type: Optional[str]) -> Node:
         """
         Build a Seq of child_len blocks at nesting 'level' (1..nest_depth).
         Structure & all arguments are frozen by rng_shape here.
@@ -702,23 +760,27 @@ class ProgramBuilder:
             m = 1
         kids: List[Node] = []
         for j in range(m):
-            t = self._choose_type()
+            t = self._choose_type(parent_type=parent_type)
             if t == "leaf":
                 kids.append(self._make_leaf_spec(f"Leaf_L{level}_{tag}_{j}"))
             elif t == "if":
                 cq = self._rand_cond_qubit()
-                then_blk = self._build_nested_seq(level + 1, f"{tag}_{j}T")
-                else_blk = self._build_nested_seq(level + 1, f"{tag}_{j}E")
+                then_blk = self._build_nested_seq(
+                    level + 1, f"{tag}_{j}T", parent_type=t)
+                else_blk = self._build_nested_seq(
+                    level + 1, f"{tag}_{j}E", parent_type=t)
                 kids.append(IfElse(cq, then_blk, else_blk, conflict_level=self.P.conflict_level,
                                    name=f"If_L{level}_{tag}_{j}"))
             elif t == "for":
                 K = choose_from_range_rng(
                     self.rng_shape, *self.P.for_iters_rng, True)
-                body = self._build_nested_seq(level + 1, f"{tag}_{j}F")
+                body = self._build_nested_seq(
+                    level + 1, f"{tag}_{j}F", parent_type=t)
                 kids.append(ForLoop(K, body, name=f"For_L{level}_{tag}_{j}"))
             else:  # while
                 cq = self._rand_cond_qubit()
-                body = self._build_nested_seq(level + 1, f"{tag}_{j}W")
+                body = self._build_nested_seq(
+                    level + 1, f"{tag}_{j}W", parent_type=t)
                 kids.append(
                     WhileLoop(cq, body, name=f"While_L{level}_{tag}_{j}"))
         return Seq(*kids)
@@ -730,23 +792,23 @@ class ProgramBuilder:
         """
         kids: List[Node] = []
         for i in range(self.P.top_len):
-            t = self._choose_type()
+            t = self._choose_type(parent_type=None)
             if t == "leaf":
                 kids.append(self._make_leaf_spec(f"TopLeaf_{i}"))
             elif t == "if":
                 cq = self._rand_cond_qubit()
-                then_blk = self._build_nested_seq(1, f"Top{i}T")
-                else_blk = self._build_nested_seq(1, f"Top{i}E")
+                then_blk = self._build_nested_seq(1, f"Top{i}T", parent_type=t)
+                else_blk = self._build_nested_seq(1, f"Top{i}E", parent_type=t)
                 kids.append(IfElse(cq, then_blk, else_blk, conflict_level=self.P.conflict_level,
                                    name=f"TopIf_{i}"))
             elif t == "for":
                 K = choose_from_range_rng(
                     self.rng_shape, *self.P.for_iters_rng, True)
-                body = self._build_nested_seq(1, f"Top{i}F")
+                body = self._build_nested_seq(1, f"Top{i}F", parent_type=t)
                 kids.append(ForLoop(K, body, name=f"TopFor_{i}"))
-            else:
+            elif t == "while":
                 cq = self._rand_cond_qubit()
-                body = self._build_nested_seq(1, f"Top{i}W")
+                body = self._build_nested_seq(1, f"Top{i}W", parent_type=t)
                 kids.append(WhileLoop(cq, body, name=f"TopWhile_{i}"))
         return Seq(*kids)
 
@@ -813,8 +875,8 @@ def build_argparser() -> argparse.ArgumentParser:
         description="d-QUEKO: structure-fixed benchmark generator; leafs vary per replicate")
 
     # I/O & reproducibility
-    p.add_argument("--device", type=str, required=True,
-                   help="grid_MxN, a JSON path, or known name in qpu/topologies/")
+    # p.add_argument("--device", type=str, required=True,
+    #                help="grid_MxN, a JSON path, or known name in qpu/topologies/")
     p.add_argument("--outdir", type=str, default="benchmarks",
                    help="Output directory to place benchmarks")
     p.add_argument("--seed", type=int, default=1,
@@ -829,13 +891,11 @@ def build_argparser() -> argparse.ArgumentParser:
                         "If omitted, uses the full device size.")
 
     # Structure (top level + nesting)
-    p.add_argument("--bench-depths", type=str, default="1..9",
-                   help="Top-level lengths for each benchmark: '1..9' or '3,5,7,...'")
+
     p.add_argument("--replicates", type=int, default=10,
                    help="Circuits per benchmark that share structure/args (leafs differ)")
-    p.add_argument("--top-len", type=int, default=None,
-                   help="If set, generate a single benchmark with this top-level length "
-                        "(overrides --bench-depths)")
+    p.add_argument("--top-len", type=int, default=10,
+                   help=" generate a benchmark with this top-level length ")
     p.add_argument("--nest-depth", type=int, default=2,
                    help="Max nesting levels below the top level (0 = no nesting)")
     p.add_argument("--child-len", type=str, default="2",
@@ -850,10 +910,8 @@ def build_argparser() -> argparse.ArgumentParser:
     # Leaf params (arguments are frozen per leaf across replicates)
     p.add_argument("--leaf-depth", type=str, default="8",
                    help="INT or A..B cycles per leaf (frozen per leaf)")
-    p.add_argument("--leaf-density", type=str, default="0.6,0.35",
+    p.add_argument("--leaf-density", type=str, default="0.5,0.5",
                    help="alpha,beta per cycle (alpha=1q/node; beta=2q/node)")
-    p.add_argument("--leaf-subgraph-size", type=str, default="20",
-                   help="INT or A..B device nodes per leaf subgraph (frozen per leaf)")
     p.add_argument("--gates-1q", type=str, default="x,h,z,rx,rz",
                    help="Comma list of allowed 1q gates (rx/ry/rz/p are parametric)")
     p.add_argument("--gates-2q", type=str, default="cx,cz",
@@ -873,16 +931,6 @@ def build_argparser() -> argparse.ArgumentParser:
 def main():
     args = build_argparser().parse_args()
 
-    # Load full device
-    G_full = load_device(args.device)
-    full_nQ = G_full.number_of_nodes()
-
-    # Parse benchmarks to build
-    if args.top_len is not None:
-        bench_depths = [int(args.top_len)]
-    else:
-        bench_depths = parse_int_list_or_range(args.bench_depths)
-
     # Parse structure knobs
     child_len_rng = parse_range(args.child_len, int)
     for_iters_rng = parse_range(args.for_iters, int)
@@ -891,133 +939,116 @@ def main():
     # Parse leaf knobs
     leaf_depth_rng = parse_range(args.leaf_depth, int)
     leaf_density = parse_density_pair(args.leaf_density)
-    leaf_subgraph_size_rng_global = parse_range(args.leaf_subgraph_size, int)
     gates_1q = [g.strip() for g in args.gates_1q.split(",") if g.strip()]
     gates_2q = [g.strip() for g in args.gates_2q.split(",") if g.strip()]
 
     # Prepare output
     ensure_dir(args.outdir)
 
-    for top_len in bench_depths:
-        # Build a per-benchmark working device of size n_qubits (or full size)
-        if args.n_qubits is not None:
-            nQ_target = int(args.n_qubits)
-        else:
-            nQ_target = full_nQ
+    # Deterministic per-benchmark selection of a connected subgraph (if needed)
+    nQ_target = int(args.n_qubits)
+    G = generate_dense_backend(nQ_target, density=.6)
+    nQ = G.number_of_nodes()
 
-        # Deterministic per-benchmark selection of a connected subgraph (if needed)
-        rng_dev = random.Random(int(args.seed) + 7919 * int(top_len))
-        G = make_working_device(G_full, nQ_target, rng_dev)
-        nQ = G.number_of_nodes()
+    top_len = int(args.top_len)
 
-        # Clamp leaf subgraph size range to nQ
-        lss_lo, lss_hi = leaf_subgraph_size_rng_global
-        if lss_hi > nQ:
-            print(
-                f"[WARN] leaf-subgraph-size hi {lss_hi} > n_qubits {nQ}; clamping to {nQ}.")
-            lss_hi = nQ
-            lss_lo = min(lss_lo, lss_hi)
-        leaf_subgraph_size_rng = (int(lss_lo), int(lss_hi))
+    bench_dir = os.path.join(
+        args.outdir, f"queko-{int(nQ):03d}qbt_nest_{int(args.nest_depth):02d}_nodes{int(top_len):03d}_leaf-depth-{leaf_depth_rng[0]}")
+    ensure_dir(bench_dir)
 
-        bench_dir = os.path.join(
-            args.outdir, f"queko-{int(nQ):03d}qbt_nest_{int(args.nest_depth):02d}_nodes{int(top_len):03d}_leaf-depth-{leaf_depth_rng[0]}")
-        ensure_dir(bench_dir)
+    # Build skeleton once (structure RNG decides everything structural + leaf arguments)
+    P = GenParams(
+        nbQubits=nQ,
+        device=G,
+        # vary by top_len but deterministic
+        seed=int(args.seed) + 101 * int(top_len),
+        leaf_depth_rng=leaf_depth_rng,
+        leaf_density=leaf_density,
+        gates_1q=gates_1q,
+        gates_2q=gates_2q,
+        top_len=int(top_len),
+        nest_depth=int(args.nest_depth),
+        child_len_rng=child_len_rng,
+        mix=mix,
+        for_iters_rng=for_iters_rng,
+        conflict_level=int(args.conflict_level),
+        emit_metadata=bool(args.emit_metadata),
+    )
 
-        # Build skeleton once (structure RNG decides everything structural + leaf arguments)
-        P = GenParams(
-            device=G,
-            # vary by top_len but deterministic
-            seed=int(args.seed) + 101 * int(top_len),
-            leaf_depth_rng=leaf_depth_rng,
-            leaf_density=leaf_density,
-            leaf_subgraph_size_rng=leaf_subgraph_size_rng,
-            gates_1q=gates_1q,
-            gates_2q=gates_2q,
-            top_len=int(top_len),
-            nest_depth=int(args.nest_depth),
-            child_len_rng=child_len_rng,
-            mix=mix,
-            for_iters_rng=for_iters_rng,
-            conflict_level=int(args.conflict_level),
-            emit_metadata=bool(args.emit_metadata),
-        )
+    builder = ProgramBuilder(P)
+    root = builder.build_top()
 
-        builder = ProgramBuilder(P)
-        root = builder.build_top()
+    # Metadata: skeleton-only counts and bit count (fixed across replicates)
+    skeleton_counts = count_nodes(root)
+    bit_count = count_bits_from_skeleton(root)
 
-        # Metadata: skeleton-only counts and bit count (fixed across replicates)
-        skeleton_counts = count_nodes(root)
-        bit_count = count_bits_from_skeleton(root)
+    circ_paths: List[str] = []
 
-        circ_paths: List[str] = []
+    # Produce replicates: each has different leaf instances (leaf RNG), optional different gates RNG
+    for rep in tqdm(range(int(args.replicates))):
+        leaf_seed = (int(args.seed) * 1000003) ^ (int(top_len)
+                                                  * 911) ^ (rep * 9721) ^ 0xA53
+        gates_seed = (int(args.seed) * 1000003) ^ (int(top_len)
+                                                   * 911) ^ (rep * 9721) ^ 0x5A3
+        leaf_rng = random.Random(leaf_seed)
+        gates_rng = random.Random(gates_seed)
 
-        # Produce replicates: each has different leaf instances (leaf RNG), optional different gates RNG
-        for rep in tqdm(range(int(args.replicates))):
-            leaf_seed = (int(args.seed) * 1000003) ^ (int(top_len)
-                                                      * 911) ^ (rep * 9721) ^ 0xA53
-            gates_seed = (int(args.seed) * 1000003) ^ (int(top_len)
-                                                       * 911) ^ (rep * 9721) ^ 0x5A3
-            leaf_rng = random.Random(leaf_seed)
-            gates_rng = random.Random(gates_seed)
+        ctx = EmitContext(n_qubits=nQ)
+        # Allocate bits deterministically by traversing the skeleton;
+        # leaf realizations use replicate-specific leaf_rng.
+        root.realize(ctx, leaf_rng)
 
-            ctx = EmitContext(n_qubits=nQ)
-            # Allocate bits deterministically by traversing the skeleton;
-            # leaf realizations use replicate-specific leaf_rng.
-            root.realize(ctx, leaf_rng)
+        # Sanity: ensure bit count matches skeleton expectation
+        if ctx.bit_alloc != bit_count:
+            raise RuntimeError(
+                f"bit_alloc mismatch: skeleton={bit_count}, realized={ctx.bit_alloc}"
+            )
 
-            # Sanity: ensure bit count matches skeleton expectation
-            if ctx.bit_alloc != bit_count:
-                raise RuntimeError(
-                    f"bit_alloc mismatch: skeleton={bit_count}, realized={ctx.bit_alloc}"
-                )
+        qasm = emit_program(root, n_qubits=nQ, ctx=ctx,
+                            gates_rng=gates_rng)
+        circ_path = os.path.join(bench_dir, f"circ_{rep:02d}.qasm")
+        with open(circ_path, "w") as f:
+            f.write(qasm)
+        circ_paths.append(circ_path)
 
-            qasm = emit_program(root, n_qubits=nQ, ctx=ctx,
-                                gates_rng=gates_rng)
-            circ_path = os.path.join(bench_dir, f"circ_{rep:02d}.qasm")
-            with open(circ_path, "w") as f:
-                f.write(qasm)
-            circ_paths.append(circ_path)
-
-            # For the first replicate, keep a snapshot of counts for metadata
-            if rep == 0:
-                sample_counts = {
-                    "n_bits": max(1, ctx.bit_alloc),
-                    "total_1q": ctx.count_1q,
-                    "total_2q": ctx.count_2q,
-                    "n_leaves": sum(1 for b in ctx.blocks if b.get("type") == "leaf"),
-                }
-
-        # Metadata per benchmark (structure and args only + sample counts from rep 0)
-        if P.emit_metadata:
-            meta = {
-                "device_nodes_full": full_nQ,
-                "n_qubits": nQ,                     # logical/working qubits used
-                "top_len": int(top_len),
-                "nest_depth": int(args.nest_depth),
-                "child_len_rng": [int(child_len_rng[0]), int(child_len_rng[1])],
-                "for_iters_rng": [int(for_iters_rng[0]), int(for_iters_rng[1])],
-                "mix": P.mix,
-                "leaf_args": {
-                    "depth_rng": [int(leaf_depth_rng[0]), int(leaf_depth_rng[1])],
-                    "density": {"alpha_1q": leaf_density[0], "beta_2q": leaf_density[1]},
-                    "subgraph_size_rng": [int(leaf_subgraph_size_rng[0]), int(leaf_subgraph_size_rng[1])],
-                    "gates_1q": gates_1q,
-                    "gates_2q": gates_2q,
-                },
-                "skeleton_counts": skeleton_counts,
-                "bit_count": bit_count,
-                "replicates": int(args.replicates),
-                "circuits": [os.path.basename(p) for p in circ_paths],
-                "args": {
-                    "seed": int(args.seed),
-                    "device": args.device,
-                    "n_qubits": int(nQ),
-                    "conflict_level": int(args.conflict_level),
-                },
-                "sample_counts_rep0": sample_counts,
+        # For the first replicate, keep a snapshot of counts for metadata
+        if rep == 0:
+            sample_counts = {
+                "n_bits": max(1, ctx.bit_alloc),
+                "total_1q": ctx.count_1q,
+                "total_2q": ctx.count_2q,
+                "n_leaves": sum(1 for b in ctx.blocks if b.get("type") == "leaf"),
             }
-            with open(os.path.join(bench_dir, "bench.json"), "w") as f:
-                json.dump(meta, f, indent=2)
+
+    # Metadata per benchmark (structure and args only + sample counts from rep 0)
+    if P.emit_metadata:
+        meta = {
+            "n_qubits": nQ,                     # logical/working qubits used
+            "top_len": int(top_len),
+            "nest_depth": int(args.nest_depth),
+            "child_len_rng": [int(child_len_rng[0]), int(child_len_rng[1])],
+            "for_iters_rng": [int(for_iters_rng[0]), int(for_iters_rng[1])],
+            "mix": P.mix,
+            "leaf_args": {
+                "depth_rng": [int(leaf_depth_rng[0]), int(leaf_depth_rng[1])],
+                "density": {"alpha_1q": leaf_density[0], "beta_2q": leaf_density[1]},
+                "gates_1q": gates_1q,
+                "gates_2q": gates_2q,
+            },
+            "skeleton_counts": skeleton_counts,
+            "bit_count": bit_count,
+            "replicates": int(args.replicates),
+            "circuits": [os.path.basename(p) for p in circ_paths],
+            "args": {
+                "seed": int(args.seed),
+                "device": args.device,
+                "n_qubits": int(nQ),
+                "conflict_level": int(args.conflict_level),
+            },
+            "sample_counts_rep0": sample_counts,
+        }
+        with open(os.path.join(bench_dir, "bench.json"), "w") as f:
+            json.dump(meta, f, indent=2)
 
         print(
             f"[OK] bench toplen={int(top_len):2d} (n_qubits={nQ}) -> {len(circ_paths)} circuits in {bench_dir}")
