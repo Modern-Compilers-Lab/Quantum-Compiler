@@ -41,7 +41,8 @@ def qlosure_poly_heuristic(front_layer, extended_layer, mapping, distance_matrix
     f_distance = 0
     for g in front_layer:
         tmp_block_distance = 0
-
+        if node_data[g]['is_control_flow']:
+            continue
         for q1, q2 in node_data[g]['coupled_qubits_accessed']:
             front_layer_size += 1
             Q1, Q2 = mapping[q1], mapping[q2]
@@ -52,7 +53,8 @@ def qlosure_poly_heuristic(front_layer, extended_layer, mapping, distance_matrix
     e_distance = 0
     for g in extended_layer:
         tmp_block_distance = 0
-
+        if node_data[g]['is_control_flow']:
+            continue
         for q1, q2 in node_data[g]['coupled_qubits_accessed']:
             extended_layer_size += 1
             Q1, Q2 = mapping[q1], mapping[q2]

@@ -6,7 +6,7 @@ def run_benchmark(n_qubits, leaf_depth):
     """Run the d-queko benchmark with specified parameters"""
     cmd = [
         "python", "./generate-d-queko.py",
-        "--nest-depth=1",
+        "--nest-depth=0",
         f"--leaf-depth={leaf_depth}",
         "--top-len=10",
         f"--n-qubits={n_qubits}"
@@ -20,12 +20,13 @@ def run_benchmark(n_qubits, leaf_depth):
         return True
     except subprocess.CalledProcessError as e:
         print(f"Error for {n_qubits} qubits, leaf_depth {leaf_depth}: {e}")
+        print(f"Stdout: {e.stdout}")
         return False
 
 
 def main():
     # Qubit counts to test
-    qubit_counts = [54, 81, 127]
+    qubit_counts = [16, 54, 81, 127]
 
     # Leaf depth range
     leaf_depths = range(10, 91, 10)  # 10, 20, 30, ..., 90

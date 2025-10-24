@@ -91,12 +91,12 @@ def run_circuit(circuit_path, backend, initial_mapping, num_iterations, verbose)
         output_dir = Path("results") / relative_path.parent / circuit_name
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        trace_txt_path = output_dir / f"{circuit_name}_trace.txt"
+        # trace_txt_path = output_dir / f"{circuit_name}_trace.txt"
         trace_json_path = output_dir / f"{circuit_name}_trace.json"
 
-        with open(trace_txt_path, "w") as f:
-            f.write(poly_mapper.format_structured_trace(trace))
-            f.write("\n")
+        # with open(trace_txt_path, "w") as f:
+        #     f.write(poly_mapper.format_structured_trace(trace))
+        #     f.write("\n")
 
         with open(trace_json_path, "w") as f:
             json.dump(trace, f, indent=2)
@@ -155,6 +155,7 @@ for folder_path in sorted(qasm_files_by_folder.keys()):
             successful += 1
         else:
             failed += 1
+        break  # Remove this break to process all circuits
 
 print(f"\n{'='*60}")
 print(f"BENCHMARK COMPLETED")

@@ -183,22 +183,6 @@ def load_device(backend_name: str) -> nx.Graph:
       • JSON path with {"coupling_map": [[u,v], ...]}
       • Known names mapped under qpu/topologies/*.json
     """
-    # grid_MxN
-    m = GRID_RE.match(backend_name)
-    if m:
-        R, C = int(m.group(1)), int(m.group(2))
-        return _make_grid_graph(R, C)
-
-    # direct JSON file path
-    if os.path.exists(backend_name) and backend_name.lower().endswith(".json"):
-        with open(backend_name, "r") as f:
-            data = json.load(f)
-        if "coupling_map" not in data:
-            raise KeyError("JSON must contain key 'coupling_map'")
-        G = nx.Graph()
-        for u, v in data["coupling_map"]:
-            G.add_edge(int(u), int(v))
-        return G
 
     # known map in qpu/topologies
     TOPOLOGIES_DIR = "qpu/topologies"
@@ -236,13 +220,23 @@ def generate_dense_backend(n: int, density: float = 0.8, seed: int = 42) -> nx.G
     G = nx.Graph()
     G.add_nodes_from(range(n))
 
+    random.seed(seed)
+
     for i in range(n):
         for j in range(i+1, n):
             if random.random() < density:
                 G.add_edge(i, j)
 
-    print(G.edges())
+    return G
 
+
+def load_gml_device(file_path: str) -> nx.Graph:
+    """
+    Load a device graph from a GML file.
+    """
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"GML file '{file_path}' not found.")
+    G = nx.read_gml(file_path)
     return G
 
 
@@ -726,8 +720,6 @@ class ProgramBuilder:
         for k in node_types:
             acc += probs.get(k, 0.0)
             if r <= acc:
-                if k == "if":
-                    print("choosing IF")
                 return k
         return "leaf"
 
@@ -748,42 +740,79 @@ class ProgramBuilder:
             name=name
         )
 
+    def _pick_loop_kind(self) -> str:
+        """Choose 'for' or 'while' honoring mix; default to 50/50."""
+        pfor = self.P.mix.get("for", 0.0)
+        pwhile = self.P.mix.get("while", 0.0)
+        total = pfor + pwhile
+        r = self.rng_shape.random()
+        if total <= 0:
+            return "for" if r < 0.5 else "while"
+        return "for" if r < (pfor / total) else "while"
+
+    def _make_seq_block(self, level: int, tag: str) -> Node:
+        """Small sequential block (a few leaves)."""
+        seq_len = max(1, choose_from_range_rng(
+            self.rng_shape, *self.P.child_len_rng, True))
+        kids: List[Node] = []
+        for j in range(seq_len):
+            kids.append(self._make_leaf_spec(f"Leaf_L{level}_{tag}_S{j}"))
+        return Seq(*kids)
+
+    def _build_nested_loop_stack(self, level: int, tag: str, loops_to_make: int) -> Node:
+        """
+        Build nested loops. For all but the last level:
+            (for/while){ SEQ ; next_level }
+        At the final level:
+            FOR{ SEQ ; IF/ELSE ; SEQ }
+        """
+        # Base case (no more loops to make) → a leaf
+        if loops_to_make <= 0 or level > self.P.nest_depth:
+            return self._make_leaf_spec(f"Leaf_L{level}_{tag}_Base")
+
+        # --- RECURSIVE LEVELS ABOVE FINAL: loop { SEQ ; next } ---
+        seq_block_before = self._make_seq_block(level, tag)
+        loop_kind = self._pick_loop_kind()  # honors mix['for']/['while']
+        seq_block_after = self._make_seq_block(level, f"{tag}_After")
+
+        next_inner = self._build_nested_loop_stack(
+            level + 1, f"{tag}_N{loops_to_make-1}", loops_to_make - 1
+        )
+        body = Seq(seq_block_before, next_inner, seq_block_after)
+
+        if loop_kind == "for":
+            K = choose_from_range_rng(
+                self.rng_shape, *self.P.for_iters_rng, True)
+            for_body = ForLoop(
+                K, body, name=f"For_L{level}_{tag}_D{loops_to_make}")
+            sec_block_before = self._make_seq_block(
+                level, f"{tag}_D{loops_to_make}_Pre")
+            sec_block_after = self._make_seq_block(
+                level, f"{tag}_D{loops_to_make}_Post")
+            full_body = Seq(sec_block_before, for_body, sec_block_after)
+            return full_body
+        else:
+            cq = self._rand_cond_qubit()
+            while_body = WhileLoop(
+                cq, body, name=f"While_L{level}_{tag}_D{loops_to_make}")
+            sec_block_before = self._make_seq_block(
+                level, f"{tag}_D{loops_to_make}_Pre")
+            sec_block_after = self._make_seq_block(
+                level, f"{tag}_D{loops_to_make}_Post")
+            full_body = Seq(sec_block_before, while_body, sec_block_after)
+            return full_body
+
     def _build_nested_seq(self, level: int, tag: str, parent_type: Optional[str]) -> Node:
         """
-        Build a Seq of child_len blocks at nesting 'level' (1..nest_depth).
-        Structure & all arguments are frozen by rng_shape here.
+        Instead of interleaving, build a *nested loop stack*:
+            loop { SEQ ; loop { SEQ ; ... } }
+        The number of nested loops equals (nest_depth - level + 1).
         """
         if level > self.P.nest_depth:
             return self._make_leaf_spec(f"Leaf_L{level}_{tag}")
-        m = choose_from_range_rng(self.rng_shape, *self.P.child_len_rng, True)
-        if m <= 0:
-            m = 1
-        kids: List[Node] = []
-        for j in range(m):
-            t = self._choose_type(parent_type=parent_type)
-            if t == "leaf":
-                kids.append(self._make_leaf_spec(f"Leaf_L{level}_{tag}_{j}"))
-            elif t == "if":
-                cq = self._rand_cond_qubit()
-                then_blk = self._build_nested_seq(
-                    level + 1, f"{tag}_{j}T", parent_type=t)
-                else_blk = self._build_nested_seq(
-                    level + 1, f"{tag}_{j}E", parent_type=t)
-                kids.append(IfElse(cq, then_blk, else_blk, conflict_level=self.P.conflict_level,
-                                   name=f"If_L{level}_{tag}_{j}"))
-            elif t == "for":
-                K = choose_from_range_rng(
-                    self.rng_shape, *self.P.for_iters_rng, True)
-                body = self._build_nested_seq(
-                    level + 1, f"{tag}_{j}F", parent_type=t)
-                kids.append(ForLoop(K, body, name=f"For_L{level}_{tag}_{j}"))
-            else:  # while
-                cq = self._rand_cond_qubit()
-                body = self._build_nested_seq(
-                    level + 1, f"{tag}_{j}W", parent_type=t)
-                kids.append(
-                    WhileLoop(cq, body, name=f"While_L{level}_{tag}_{j}"))
-        return Seq(*kids)
+
+        loops_to_make = max(1, self.P.nest_depth - level + 1)
+        return self._build_nested_loop_stack(level, tag, loops_to_make)
 
     def build_top(self) -> Node:
         """
@@ -801,15 +830,21 @@ class ProgramBuilder:
                 else_blk = self._build_nested_seq(1, f"Top{i}E", parent_type=t)
                 kids.append(IfElse(cq, then_blk, else_blk, conflict_level=self.P.conflict_level,
                                    name=f"TopIf_{i}"))
+                post_if = self._make_seq_block(1, f"Top{i}I_Post")
+                kids.append(post_if)
             elif t == "for":
                 K = choose_from_range_rng(
                     self.rng_shape, *self.P.for_iters_rng, True)
                 body = self._build_nested_seq(1, f"Top{i}F", parent_type=t)
                 kids.append(ForLoop(K, body, name=f"TopFor_{i}"))
+                post_loop = self._make_seq_block(1, f"Top{i}F_Post")
+                kids.append(post_loop)
             elif t == "while":
                 cq = self._rand_cond_qubit()
                 body = self._build_nested_seq(1, f"Top{i}W", parent_type=t)
                 kids.append(WhileLoop(cq, body, name=f"TopWhile_{i}"))
+                post_loop = self._make_seq_block(1, f"Top{i}W_Post")
+                kids.append(post_loop)
         return Seq(*kids)
 
 # ---------------------------------------------------------------------------
@@ -877,18 +912,15 @@ def build_argparser() -> argparse.ArgumentParser:
     # I/O & reproducibility
     # p.add_argument("--device", type=str, required=True,
     #                help="grid_MxN, a JSON path, or known name in qpu/topologies/")
-    p.add_argument("--outdir", type=str, default="benchmarks",
-                   help="Output directory to place benchmarks")
+
     p.add_argument("--seed", type=int, default=1,
                    help="Seed for the STRUCTURE RNG (arguments and shape are frozen per benchmark)")
     p.add_argument("--emit-metadata", action="store_true",
                    help="Write bench.json with structure, args and sample counts")
 
     # NEW: logical qubit count used for this benchmark
-    p.add_argument("--n-qubits", type=int, default=None,
-                   help="Number of qubits to use in the generated circuits. "
-                        "If smaller than the device, a connected subgraph of this size is selected and relabeled to 0..n-1. "
-                        "If omitted, uses the full device size.")
+    p.add_argument("--n-qubits", type=int, required=True, default=16,
+                   help="Number of qubits to use in the generated circuits. ")
 
     # Structure (top level + nesting)
 
@@ -942,18 +974,29 @@ def main():
     gates_1q = [g.strip() for g in args.gates_1q.split(",") if g.strip()]
     gates_2q = [g.strip() for g in args.gates_2q.split(",") if g.strip()]
 
+    bench_dir = f"benchmarks/{args.n_qubits}qbt"
     # Prepare output
-    ensure_dir(args.outdir)
+    ensure_dir(bench_dir)
 
     # Deterministic per-benchmark selection of a connected subgraph (if needed)
     nQ_target = int(args.n_qubits)
-    G = generate_dense_backend(nQ_target, density=.6)
-    nQ = G.number_of_nodes()
+
+    G_full = load_device("ibm_sherbrooke")  # TEMP OVERRIDE
+    G = make_working_device(
+        G_full, nQ_target, rng=random.Random(int(args.seed) + 12345))
+    # G = load_gml_device(
+    #     f"qpu/dqueko/backend_{nQ_target}_qubits_seed_42_density_0.3.gml")
+    nQ = nQ_target
+
+    if nQ > G.number_of_nodes():
+        raise ValueError(
+            f"Requested n_qubits={nQ} exceeds device size={G.number_of_nodes()}."
+        )
 
     top_len = int(args.top_len)
 
     bench_dir = os.path.join(
-        args.outdir, f"queko-{int(nQ):03d}qbt_nest_{int(args.nest_depth):02d}_nodes{int(top_len):03d}_leaf-depth-{leaf_depth_rng[0]}")
+        bench_dir, f"queko-{int(nQ):03d}qbt_nest_{int(args.nest_depth):02d}_nodes{int(top_len):03d}_leaf-depth-{leaf_depth_rng[0]}")
     ensure_dir(bench_dir)
 
     # Build skeleton once (structure RNG decides everything structural + leaf arguments)
@@ -1041,7 +1084,7 @@ def main():
             "circuits": [os.path.basename(p) for p in circ_paths],
             "args": {
                 "seed": int(args.seed),
-                "device": args.device,
+                "device": f"qpu/dqueko/backend_{nQ_target}_qubits_seed_42_density_0.3.gml",
                 "n_qubits": int(nQ),
                 "conflict_level": int(args.conflict_level),
             },

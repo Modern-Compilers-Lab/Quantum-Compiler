@@ -332,12 +332,12 @@ class Qlosure():
 
         # first pass to generate a good initial mapping
         swap_count, depth, good_initial_mapping = qlosure1.run(loop_dag, loop_dag2q, heuristic_method="Qlosure",
-                                                               initial_mapping_method="custom", initial_mapping=self.mapping_dict, num_iter=2)
+                                                               initial_mapping_method="custom", initial_mapping=self.mapping_dict, num_iter=5)
 
         _, _, before_loop_swaps = solve_token_swapping(
             self.backend_connections,
-            good_initial_mapping,
             self.mapping_dict,
+            good_initial_mapping,
         )
 
         # ---- BEFORE-LOOP reconciliation: current -> good_initial_mapping
@@ -427,8 +427,8 @@ class Qlosure():
 
         self.update_front_layer([if_else_node_id])
 
-        logical_qubits = [
-            q for gate in self.front_layer for q in self.node_data[gate]['qubits_accessed'] if len(self.node_data[gate]['qubits_accessed']) == 2]
+        logical_qubits = [q for gate in self.front_layer for q in self.node_data[gate]['qubits_accessed'] if len(
+            self.node_data[gate]['qubits_accessed']) == 2 and not self.node_data[gate]['is_control_flow']]
         physical_qubits = set(self.mapping_dict[q] for q in logical_qubits)
 
         extended_layer, extended_layer_index = create_leveled_extended_successor_set(

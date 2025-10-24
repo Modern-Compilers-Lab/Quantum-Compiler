@@ -54,7 +54,9 @@ def _max_swaps_count_list(items: List[Dict[str, Any]], loop_iterations: int) -> 
     total = 0
     for it in items:
         t = it.get("type")
-
+        if t not in ("swap", "gate", "for", "while", "if"):
+            raise ValueError(f"Unknown item type: {t}")
+            exit(1)
         if t == "swap":
             total += 1
         elif t == "gate":
