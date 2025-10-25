@@ -26,7 +26,7 @@ def run_benchmark(n_qubits, leaf_depth):
 
 def main():
     # Qubit counts to test
-    qubit_counts = [16, 54, 81, 127]
+    qubit_counts = [121]
 
     # Leaf depth range
     leaf_depths = range(10, 91, 10)  # 10, 20, 30, ..., 90

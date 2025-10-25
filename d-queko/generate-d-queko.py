@@ -83,6 +83,7 @@ import random
 # ---------------------------------------------------------------------------
 
 GRID_RE = re.compile(r"grid_(\d+)x(\d+)$", re.IGNORECASE)
+DEPTH_FACTOR = 3  # multiplier for leaf depth based on top-level length
 
 
 def ensure_dir(path: str):
@@ -95,8 +96,12 @@ def parse_range(s: str, kind=int) -> Tuple[Union[int, float], Union[int, float]]
     """
     s = str(s).strip()
     if ".." in s:
-        a, b = s.split("..", 1)
-        return kind(a), kind(b)
+        parts = s.split("..")
+        if len(parts) != 2:
+            raise ValueError("Range must be in format 'a..b'")
+        lo = kind(parts[0].strip())
+        hi = kind(parts[1].strip())
+        return lo, hi
     v = kind(s)
     return v, v
 
@@ -122,6 +127,7 @@ def parse_mix(s: str) -> Dict[str, float]:
     Parse a probability mix like 'leaf:0.5,if:0.2,for:0.2,while:0.1'.
     Missing keys default to 0. Values are normalized to sum to 1.
     """
+    return {"leaf": 0.2, "for": 0.4, "while": 0.4, "if": 0.0}
     base = {"leaf": 0.3, "for": 0.25, "while": 0.25, "if": 0.2, }
     if not s:
         return base
@@ -159,20 +165,35 @@ def parse_int_list_or_range(s: str) -> List[int]:
 # ---------------------------------------------------------------------------
 
 
-def _make_grid_graph(m: int, n: int) -> nx.Graph:
+def generate_heavy_grid(m: int, n: int) -> nx.Graph:
     """
     Create an m x n 4-neighborhood grid as an undirected graph,
     nodes labeled 0..m*n-1.
     """
     G = nx.Graph()
-    def idx(r, c): return r * n + c
+    def get_node_id(r, c): return r * n + c
     for r in range(m):
         for c in range(n):
-            u = idx(r, c)
+            u = get_node_id(r, c)
+
             if r + 1 < m:
-                G.add_edge(u, idx(r + 1, c))
+                G.add_edge(u, get_node_id(r + 1, c))
             if c + 1 < n:
-                G.add_edge(u, idx(r, c + 1))
+                G.add_edge(u, get_node_id(r, c + 1))
+            if c - 1 >= 0:
+                G.add_edge(u, get_node_id(r, c - 1))
+            if r - 1 >= 0:
+                G.add_edge(u, get_node_id(r - 1, c))
+
+            # diagonals
+            if r + 1 < m and c + 1 < n:
+                G.add_edge(u, get_node_id(r + 1, c + 1))
+            if r + 1 < m and c - 1 >= 0:
+                G.add_edge(u, get_node_id(r + 1, c - 1))
+            if r - 1 >= 0 and c + 1 < n:
+                G.add_edge(u, get_node_id(r - 1, c + 1))
+            if r - 1 >= 0 and c - 1 >= 0:
+                G.add_edge(u, get_node_id(r - 1, c - 1))
     return G
 
 
@@ -451,21 +472,6 @@ class LeafSpec(Node):
         self._plan_by_cycle: List[List[Tuple[str, int, Optional[int]]]] = []
         self._last_nodes: List[int] = []  # last chosen patch (for metadata)
 
-    def random_maximal_matching(self, G: nx.Graph, nodes, rng: random.Random):
-        # Build candidate edges inside the patch and randomize their order
-        edges = [(u, v) for u, v in G.subgraph(nodes).edges()]
-        rng.shuffle(edges)
-
-        used = set()
-        chosen = []
-        for u, v in edges:
-            if u in used or v in used:
-                continue
-            chosen.append((u, v))
-            used.add(u)
-            used.add(v)
-        return chosen  # list of disjoint edges (a randomized maximal matching)
-
     def realize(self, ctx: EmitContext, leaf_rng: random.Random, avoid: Optional[set] = None) -> set:
         # Reset plan for this replicate
         self._plan_by_cycle = []
@@ -484,8 +490,7 @@ class LeafSpec(Node):
         for _ in range(self.depth):
             cycle_ops: List[Tuple[str, int, Optional[int]]] = []
             temp = nx.Graph(patchG)
-            matching = list(self.random_maximal_matching(
-                temp, self._last_nodes, leaf_rng))
+            matching = list(maximal_matching(temp))
             leaf_rng.shuffle(matching)
             chosen_2q = matching[:target_2q]
 
@@ -663,7 +668,7 @@ class GenParams:
     device: nx.Graph
     seed: int
     # Leaf defaults
-    leaf_depth_rng: Tuple[int, int]
+    leaf_depth: Tuple[int, int]
     leaf_density: Tuple[float, float]
     gates_1q: List[str]
     gates_2q: List[str]
@@ -696,42 +701,22 @@ class ProgramBuilder:
 
         acc = 0.0
         probs = self.P.mix
-        if parent_type == "if":
-            probs = probs.copy()
-            for node_type in node_types:
-                if node_type == "if":
-                    probs[node_type] = 0.0
-                else:
-                    probs[node_type] /= (1.0 - self.P.mix.get("if", 0.0))
-        elif parent_type == "while":
-            probs = probs.copy()
-            for node_type in node_types:
-                if node_type == "while":
-                    probs[node_type] = 0.0
-                else:
-                    probs[node_type] /= (1.0 - self.P.mix.get("while", 0.0))
-        elif parent_type == "for":
-            probs = probs.copy()
-            for node_type in node_types:
-                if node_type == "for":
-                    probs[node_type] = 0.0
-                else:
-                    probs[node_type] /= (1.0 - self.P.mix.get("for", 0.0))
+
         for k in node_types:
             acc += probs.get(k, 0.0)
             if r <= acc:
                 return k
         return "leaf"
 
-    def _make_leaf_spec(self, name: str) -> LeafSpec:
+    def _make_leaf_spec(self, name: str, depth_factor: float = 1) -> LeafSpec:
         size = self.P.nbQubits
-        depth = choose_from_range_rng(
-            self.rng_shape, *self.P.leaf_depth_rng, True)
+
+        depth = self.P.leaf_depth
         alpha, beta = self.P.leaf_density
         return LeafSpec(
             device=self.G,
             size=size,
-            depth=depth,
+            depth=depth*depth_factor,
             alpha=alpha,
             beta=beta,
             gates_1q=self.P.gates_1q,
@@ -752,11 +737,9 @@ class ProgramBuilder:
 
     def _make_seq_block(self, level: int, tag: str) -> Node:
         """Small sequential block (a few leaves)."""
-        seq_len = max(1, choose_from_range_rng(
-            self.rng_shape, *self.P.child_len_rng, True))
+
         kids: List[Node] = []
-        for j in range(seq_len):
-            kids.append(self._make_leaf_spec(f"Leaf_L{level}_{tag}_S{j}"))
+        kids.append(self._make_leaf_spec(f"Leaf_L{level}_{tag}"))
         return Seq(*kids)
 
     def _build_nested_loop_stack(self, level: int, tag: str, loops_to_make: int) -> Node:
@@ -768,7 +751,7 @@ class ProgramBuilder:
         """
         # Base case (no more loops to make) → a leaf
         if loops_to_make <= 0 or level > self.P.nest_depth:
-            return self._make_leaf_spec(f"Leaf_L{level}_{tag}_Base")
+            return self._make_leaf_spec(f"Leaf_L{level}_{tag}_Base", depth_factor=DEPTH_FACTOR)
 
         # --- RECURSIVE LEVELS ABOVE FINAL: loop { SEQ ; next } ---
         seq_block_before = self._make_seq_block(level, tag)
@@ -809,7 +792,7 @@ class ProgramBuilder:
         The number of nested loops equals (nest_depth - level + 1).
         """
         if level > self.P.nest_depth:
-            return self._make_leaf_spec(f"Leaf_L{level}_{tag}")
+            return self._make_leaf_spec(f"Leaf_L{level}_{tag}", depth_factor=DEPTH_FACTOR)
 
         loops_to_make = max(1, self.P.nest_depth - level + 1)
         return self._build_nested_loop_stack(level, tag, loops_to_make)
@@ -942,7 +925,7 @@ def build_argparser() -> argparse.ArgumentParser:
     # Leaf params (arguments are frozen per leaf across replicates)
     p.add_argument("--leaf-depth", type=str, default="8",
                    help="INT or A..B cycles per leaf (frozen per leaf)")
-    p.add_argument("--leaf-density", type=str, default="0.5,0.5",
+    p.add_argument("--leaf-density", type=str, default="0.3,0.7",
                    help="alpha,beta per cycle (alpha=1q/node; beta=2q/node)")
     p.add_argument("--gates-1q", type=str, default="x,h,z,rx,rz",
                    help="Comma list of allowed 1q gates (rx/ry/rz/p are parametric)")
@@ -969,7 +952,7 @@ def main():
     mix = parse_mix(args.mix)
 
     # Parse leaf knobs
-    leaf_depth_rng = parse_range(args.leaf_depth, int)
+    leaf_depth = int(args.leaf_depth)
     leaf_density = parse_density_pair(args.leaf_density)
     gates_1q = [g.strip() for g in args.gates_1q.split(",") if g.strip()]
     gates_2q = [g.strip() for g in args.gates_2q.split(",") if g.strip()]
@@ -981,11 +964,11 @@ def main():
     # Deterministic per-benchmark selection of a connected subgraph (if needed)
     nQ_target = int(args.n_qubits)
 
-    G_full = load_device("ibm_sherbrooke")  # TEMP OVERRIDE
-    G = make_working_device(
-        G_full, nQ_target, rng=random.Random(int(args.seed) + 12345))
-    # G = load_gml_device(
-    #     f"qpu/dqueko/backend_{nQ_target}_qubits_seed_42_density_0.3.gml")
+    g_rows = math.isqrt(nQ_target) if nQ_target != 54 else 9
+    g_cols = (nQ_target + g_rows - 1) // g_rows if nQ_target != 54 else 6
+    # G = generate_heavy_grid(m=g_rows, n=g_cols)
+    G = load_gml_device(
+        f"qpu/dqueko/backend_{nQ_target}_qubits_seed_42_density_0.3.gml")
     nQ = nQ_target
 
     if nQ > G.number_of_nodes():
@@ -996,7 +979,7 @@ def main():
     top_len = int(args.top_len)
 
     bench_dir = os.path.join(
-        bench_dir, f"queko-{int(nQ):03d}qbt_nest_{int(args.nest_depth):02d}_nodes{int(top_len):03d}_leaf-depth-{leaf_depth_rng[0]}")
+        bench_dir, f"queko-{int(nQ):03d}qbt_nest_{int(args.nest_depth):02d}_nodes{int(top_len):03d}_leaf-depth-{leaf_depth}")
     ensure_dir(bench_dir)
 
     # Build skeleton once (structure RNG decides everything structural + leaf arguments)
@@ -1005,7 +988,7 @@ def main():
         device=G,
         # vary by top_len but deterministic
         seed=int(args.seed) + 101 * int(top_len),
-        leaf_depth_rng=leaf_depth_rng,
+        leaf_depth=leaf_depth,
         leaf_density=leaf_density,
         gates_1q=gates_1q,
         gates_2q=gates_2q,
@@ -1073,7 +1056,7 @@ def main():
             "for_iters_rng": [int(for_iters_rng[0]), int(for_iters_rng[1])],
             "mix": P.mix,
             "leaf_args": {
-                "depth_rng": [int(leaf_depth_rng[0]), int(leaf_depth_rng[1])],
+                "depth": leaf_depth,
                 "density": {"alpha_1q": leaf_density[0], "beta_2q": leaf_density[1]},
                 "gates_1q": gates_1q,
                 "gates_2q": gates_2q,
