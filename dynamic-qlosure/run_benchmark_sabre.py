@@ -38,7 +38,7 @@ parser = argparse.ArgumentParser(
 parser.add_argument("--bench", type=str,
                     default="16qbt", help="Benchmark folder name (e.g., 16qbt, 54qbt)")
 parser.add_argument("--backend", type=str,
-                    default="ibm_sherbrooke", help="Name of the backend")
+                    default="ibm_brisbane", help="Name of the backend")
 parser.add_argument("--initial", type=str, default="trivial",
                     help="Initial mapping method")
 parser.add_argument("--verbose", type=int, default=0, help="Verbosity level")
@@ -124,15 +124,15 @@ def run_circuit(circuit_path, backend, initial_mapping, num_iterations, verbose)
             relative_path.parent / circuit_name
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        # trace_txt_path = output_dir / f"{circuit_name}_trace.txt"
+        trace_txt_path = output_dir / f"{circuit_name}_trace.txt"
         trace_json_path = output_dir / f"{circuit_name}_trace.json"
 
         with open(trace_json_path, "w") as f:
             json.dump(trace, f, indent=2)
 
-        # with open(trace_txt_path, "w") as f:
-        #     f.write(format_structured_trace(trace))
-        #     f.write("\n")
+        with open(trace_txt_path, "w") as f:
+            f.write(format_structured_trace(trace))
+            f.write("\n")
 
         return True, max_swaps, quant_depth
 
@@ -175,6 +175,9 @@ for folder_path in sorted(qasm_files_by_folder.keys()):
     circuits = qasm_files_by_folder[folder_path]
     folder_display = folder_path if folder_path else "root"
 
+    # if "leaf-depth-40" not in folder_path:
+    #     continue
+
     print(
         f"\n🗂️ Processing folder: {folder_display} ({len(circuits)} circuits)")
 
@@ -189,7 +192,7 @@ for folder_path in sorted(qasm_files_by_folder.keys()):
             successful += 1
         else:
             failed += 1
-        break  # Remove this break to process all circuits
+    # break  # Remove this break to process all circuits
 
 print(f"\n{'='*60}")
 print(f"BENCHMARK COMPLETED")

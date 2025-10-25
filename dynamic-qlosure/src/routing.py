@@ -332,7 +332,7 @@ class Qlosure():
 
         # first pass to generate a good initial mapping
         swap_count, depth, good_initial_mapping = qlosure1.run(loop_dag, loop_dag2q, heuristic_method="Qlosure",
-                                                               initial_mapping_method="custom", initial_mapping=self.mapping_dict, num_iter=5)
+                                                               initial_mapping_method="custom", initial_mapping=self.mapping_dict, num_iter=3)
 
         _, _, before_loop_swaps = solve_token_swapping(
             self.backend_connections,
@@ -587,6 +587,11 @@ class Qlosure():
 
             elif item["type"] == "for":
                 lines.append(f"{pad}for (iterations={item['iterations']}) {{")
+                lines.append(self.format_structured_trace(
+                    item["body"], indent + 1))
+                lines.append(f"{pad}}}")
+            elif item["type"] == "while":
+                lines.append(f"{pad}while (condition={item['condition']}) {{")
                 lines.append(self.format_structured_trace(
                     item["body"], indent + 1))
                 lines.append(f"{pad}}}")

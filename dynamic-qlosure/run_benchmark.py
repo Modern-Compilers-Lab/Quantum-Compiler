@@ -31,7 +31,7 @@ parser = argparse.ArgumentParser(
 parser.add_argument("--bench", type=str,
                     default="16qbt", help="Benchmark folder name (e.g., 16qbt, 54qbt)")
 parser.add_argument("--backend", type=str,
-                    default="ibm_sherbrooke", help="Name of the backend")
+                    default="ibm_brisbane", help="Name of the backend")
 parser.add_argument("--initial", type=str, default="trivial",
                     help="Initial mapping method")
 parser.add_argument("--verbose", type=int, default=0, help="Verbosity level")
@@ -141,6 +141,9 @@ for folder_path in sorted(qasm_files_by_folder.keys()):
     circuits = qasm_files_by_folder[folder_path]
     folder_display = folder_path if folder_path else "root"
 
+    # if "leaf-depth-40" not in folder_path:
+    #     continue
+
     print(
         f"\n🗂️ Processing folder: {folder_display} ({len(circuits)} circuits)")
 
@@ -155,7 +158,7 @@ for folder_path in sorted(qasm_files_by_folder.keys()):
             successful += 1
         else:
             failed += 1
-        break  # Remove this break to process all circuits
+    # break  # Remove this break to process all circuits
 
 print(f"\n{'='*60}")
 print(f"BENCHMARK COMPLETED")

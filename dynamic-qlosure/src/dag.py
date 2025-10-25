@@ -37,12 +37,15 @@ def dag_simplifier(dagcircuit, _id_counter=None):
                    for node in op_nodes}
 
     for node in op_nodes:
+
+        # print(node._node_id)
+        # exit(1)
         node_id = node_id_map[node]
         simple_dag['nodes'].add(node_id)
         simple_dag['successors'][node_id] = set()
         simple_dag['predecessors'][node_id] = set()
 
-        qubits_accessed = [qubit_list.index(q) for q in node.qargs]
+        qubits_accessed = [q._index for q in node.qargs]
         # coupled_qubits = [tuple(qubits_accessed)] if len(
         #     qubits_accessed) == 2 else []
         coupled_qubits = (

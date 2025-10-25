@@ -110,7 +110,7 @@ def _structural_depth_list(items: List[Dict[str, Any]], loop_iterations: int) ->
 
 def _get_qubits_for_item(
     item: Dict[str, Any],
-    use_physical_qubits: bool
+    use_physical_qubits: bool = True
 ) -> List[Tuple[int, ...]]:
     """
     For a single 'gate' or 'swap' item, return a list with one tuple of qubits it touches.
@@ -162,10 +162,7 @@ def _schedule_op(
     ASAP schedule for a single op on given qubits.
     Returns the layer used by this op, and updates qubit_time.
     """
-    start = 0
-    for q in qubits:
-        start = max(start, qubit_time[q])
-    layer = start + 1
+    layer = max(qubit_time[q] for q in qubits) + 1
     for q in qubits:
         qubit_time[q] = layer
     return layer
@@ -175,7 +172,7 @@ def _quantum_depth_list(
     items: List[Dict[str, Any]],
     qubit_time: Dict[int, int],
     loop_iterations: int,
-    use_physical_qubits: bool
+    use_physical_qubits: bool = True
 ) -> Tuple[Dict[int, int], int]:
     """
     Schedule a sequence of items (basic block) and return:
@@ -215,7 +212,7 @@ def _quantum_depth_list(
             branches = it.get("branches", [])
 
             # Evaluate each branch from the *same* incoming state, pick worst depth
-            best_depth = max_layer
+            best_depth = float('-inf')
             best_state = None
 
             for br in branches:
