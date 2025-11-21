@@ -13,7 +13,8 @@ BACKEND_FILE_MAP = {
     "ibm_sherbrooke": "ibm_sherbrooke.json",
     "ankaa": "Ankaa-3.json",
     "imb_sherbrooke2X": "IBM_sherbrooke2x.json",
-    "ibm_brisbane": "ibm_brisban.json"
+    "ibm_brisbane": "ibm_brisban.json",
+    "ibm_kingston": "ibm_kingston.json",
 }
 
 

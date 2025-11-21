@@ -11,7 +11,7 @@ from qiskit import qasm3
 
 from src.routing import Qlosure
 from src.dag import build_dag, extract_multi_qubit_dag
-from src.evaluation import compute_max_swaps_count, compute_structural_depth, compute_quantum_depth
+from src.evaluation import compute_max_swaps_count, compute_quantum_depth
 
 from qpu.src.load_backend import load_backend_edges
 from src.backend import QuantumBackend
@@ -30,7 +30,6 @@ from qiskit.transpiler.passes import SetLayout, ApplyLayout, SabreSwap
 from qpu.src.load_backend import load_backend_edges
 from src.parser import build_structured_trace_from_circuit, format_structured_trace
 
-d_queko_benchmarks_dir = "../d-queko/benchmarks/"
 
 # Argument parser setup
 parser = argparse.ArgumentParser(
@@ -38,14 +37,20 @@ parser = argparse.ArgumentParser(
 parser.add_argument("--bench", type=str,
                     default="16qbt", help="Benchmark folder name (e.g., 16qbt, 54qbt)")
 parser.add_argument("--backend", type=str,
-                    default="ibm_brisbane", help="Name of the backend")
+                    default="ibm_kingston", help="Name of the backend")
 parser.add_argument("--initial", type=str, default="trivial",
                     help="Initial mapping method")
 parser.add_argument("--verbose", type=int, default=0, help="Verbosity level")
 parser.add_argument("--num_iterations", type=int, default=1,
                     help="number of bidirectional passes")
+parser.add_argument("--template", type=str, default="nest0",
+                    choices=["nest0", "nest1", "if_else_inside_for","nest2"],
+                    help="Template type for D-QuEKO circuits")
 
 args = parser.parse_args()
+
+d_queko_benchmarks_dir = f"../d-queko/benchmarks/{args.template}/{args.bench}/"
+results_root_dir = f"results/{args.template}/{args.backend}/{args.bench}"
 
 
 def find_qasm_files(bench_dir):
@@ -96,9 +101,6 @@ def run_circuit(circuit_path, backend, initial_mapping, num_iterations, verbose)
             new_qargs = [qr[computed_layout[vq]] for vq in qargs]
             mapped_circuit.append(instr, new_qargs, cargs)
 
-        # (Optional) If you have calibrations in qc, bring them over:
-        # for gate, qubits, calib in qc.calibrations.items(): ...
-        # mapped_circuit.calibrations = qc.calibrations
 
         # 5) Now run SABRE on the PHYSICAL circuit (allowed in your Terra)
         pm = PassManager([
@@ -110,9 +112,6 @@ def run_circuit(circuit_path, backend, initial_mapping, num_iterations, verbose)
         trace = build_structured_trace_from_circuit(
             routed_qc, decompose=False)
 
-        max_swaps = compute_max_swaps_count(trace, loop_iterations=100)
-        quant_depth = compute_quantum_depth(
-            trace, loop_iterations=100, use_physical_qubits=True)
 
         # Save results
         circuit_path_obj = Path(circuit_path)
@@ -120,8 +119,8 @@ def run_circuit(circuit_path, backend, initial_mapping, num_iterations, verbose)
         relative_path = circuit_path_obj.relative_to(
             Path(d_queko_benchmarks_dir))
 
-        output_dir = Path("results_sabre") / \
-            relative_path.parent / circuit_name
+        # add circuit parent
+        output_dir = Path(results_root_dir)/relative_path.parent /circuit_name
         output_dir.mkdir(parents=True, exist_ok=True)
 
         trace_txt_path = output_dir / f"{circuit_name}_trace.txt"
@@ -134,7 +133,7 @@ def run_circuit(circuit_path, backend, initial_mapping, num_iterations, verbose)
             f.write(format_structured_trace(trace))
             f.write("\n")
 
-        return True, max_swaps, quant_depth
+        return True, None, None
 
     except Exception as e:
         print(f"❌ Error processing {circuit_path}: {str(e)}")
@@ -143,7 +142,7 @@ def run_circuit(circuit_path, backend, initial_mapping, num_iterations, verbose)
 
 
 # Main execution
-bench_dir = Path(d_queko_benchmarks_dir) / args.bench
+bench_dir = Path(d_queko_benchmarks_dir)
 
 if not bench_dir.exists():
     print(f"❌ Benchmark directory {bench_dir} does not exist!")
@@ -158,8 +157,11 @@ if not qasm_files_by_folder:
 
 # Load backend edges
 print(f"Loading backend: {args.backend}")
-edges = load_backend_edges(args.backend)
-backend = QuantumBackend(edges)
+with open(f"/scratch/mb10324/Quantum-Compiler/d-queko/qpu/topologies/{args.backend}.json", 'r', encoding="utf-8") as fp:
+    ibm_brisbane_old_topology = json.load(fp)
+edges = ibm_brisbane_old_topology.get("coupling_map", [])
+qubits_props = ibm_brisbane_old_topology.get("qubits", {})
+backend = QuantumBackend(edges, qubit_props=qubits_props)
 print("✅ Backend topology loaded.")
 
 # Process circuits folder by folder

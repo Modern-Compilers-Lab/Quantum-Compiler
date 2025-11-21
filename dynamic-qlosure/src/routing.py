@@ -13,16 +13,18 @@ from typing import List, Tuple, Dict, Any, Optional
 
 
 class Qlosure():
-    def __init__(self, backend: QuantumBackend, with_circuit=True) -> None:
+    def __init__(self, backend: QuantumBackend, with_circuit=True,decay_parameter=None,seed=42) -> None:
         self.backend_config = backend
         self.backend_connections = backend.connections
         self.backend = backend.graph
         self.distance_matrix = backend.distance_matrix
         self.num_qubits = backend.num_qubits
+        self.qubit_props = backend.qubit_props
+        self.random_seed = seed
 
         self.with_circuit = with_circuit
 
-        self.decay_parameter = [1 for _ in range(self.num_qubits)]
+        self.decay_parameter = decay_parameter if decay_parameter else [1 for _ in range(self.num_qubits)]
         self.qubit_depth = {q: 0 for q in range(self.num_qubits)}
 
         self.reset = 5
@@ -38,7 +40,7 @@ class Qlosure():
         # Single global counter across the whole program for pretty numbering
         self._global_gate_counter: int = 0
 
-    def run(self, dag, dag2q, heuristic_method="Qlosure", initial_mapping_method="trivial", initial_mapping=None, num_iter=1, param=5, verbose=0):
+    def run(self, dag, dag2q, heuristic_method="Qlosure", initial_mapping_method="trivial", initial_mapping=None, num_iter=1, param=5, decay_max_reset=None,verbose=0):
 
         self.init_mapping(method=initial_mapping_method,
                           initial_mapping=initial_mapping)
@@ -88,7 +90,7 @@ class Qlosure():
             self.init_front_layer()
             self.qubit_depth = {q: 0 for q in range(self.num_qubits)}
             swap_count = self.execute_algorithm(
-                heuristic_method, param, verbose)
+                heuristic_method, param, decay_max_reset,verbose)
 
             if i % 2 == 0:
                 if swap_count < min_swaps:
@@ -131,21 +133,27 @@ class Qlosure():
             if len(self.dag_predecessors_full[gate]) == 0:
                 self.front_layer.add(gate)
 
-    def execute_algorithm(self, huristic_method, param, verbose):
+    def execute_algorithm(self, huristic_method, param, decay_max_reset,verbose):
         swap_count = 0
         total_gates = len(self.dag_successors_full)
-        self.decay_parameter = [1 for _ in range(self.num_qubits)]
+        self.decay_parameter = [1 for _ in range(self.num_qubits)] if self.decay_parameter is None else self.decay_parameter
+        decay_swap_counter = 0
         with tqdm(total=total_gates, desc="Running Qlosure", mininterval=0.1, disable=(verbose == 0), leave=True) as pbar:
             while len(self.front_layer) > 0:
 
                 ready_to_execute_gates = self.extract_ready_to_execute_gate_list()
 
                 if len(ready_to_execute_gates) > 0:
-
+                    # sort randomly with seed for reproducibility
+                    random.seed(self.random_seed)
+                    random.shuffle(ready_to_execute_gates)
                     self.update_front_layer(
                         ready_to_execute_gates)
-
-                    self.decay_parameter = [1 for _ in range(self.num_qubits)]
+                    
+                    if not decay_max_reset or  decay_swap_counter >= decay_max_reset:
+                        self.decay_parameter = [1 for _ in range(self.num_qubits)]
+                        decay_swap_counter = 0
+                    
                     pbar.update(len(ready_to_execute_gates))
                 elif all(self.node_data[gate]['is_control_flow'] for gate in self.front_layer):
                     node_id = next(
@@ -168,8 +176,8 @@ class Qlosure():
                 else:
 
                     local_swap_count = self.apply_heuristic(
-                        huristic_method, param, verbose=verbose)
-
+                        huristic_method, param ,verbose=verbose)
+                    decay_swap_counter += local_swap_count
                     swap_count += local_swap_count
 
         return swap_count
@@ -263,9 +271,10 @@ class Qlosure():
             q for gate in self.front_layer for q in self.node_data[gate]['qubits_accessed'] if len(self.node_data[gate]['qubits_accessed']) == 2 and not self.node_data[gate]['is_control_flow']]
         physical_qubits = set(self.mapping_dict[q] for q in logical_qubits)
 
+
+        # update extended layer size based on the heuristic choosed
         self.extended_layer, extended_layer_index = create_leveled_extended_successor_set(
-            self.front_layer, self.dag_successors2q, len(
-                physical_qubits)*param, self.node_data
+            self.front_layer, self.dag_successors2q, 5*len(physical_qubits), self.node_data
         )
 
         candidate_swaps = generate_swap_candidates(
@@ -277,11 +286,39 @@ class Qlosure():
                 self.mapping_dict, self.reverse_mapping_dict, swap_gate
             )
 
-            score = qlosure_poly_heuristic(self.front_layer, self.extended_layer, temp_mapping_dict,
-                                           self.distance_matrix, self.node_data, self.decay_parameter, self.dag_dependencies_count, extended_layer_index, swap_gate)
+            # old
+            # score = qlosure_poly_heuristic(self.front_layer, self.extended_layer, temp_mapping_dict, 
+            #                             self.distance_matrix, self.node_data, self.decay_parameter, self.dag_dependencies_count, extended_layer_index, swap_gate)
+            # # used one  
+            score = new_qlosure_poly_heuristic(self.front_layer, self.extended_layer, temp_mapping_dict,
+                                                self.distance_matrix, self.node_data, self.decay_parameter, self.dag_dependencies_count, extended_layer_index, swap_gate,qubit_props=self.qubit_props)
+            
+            # no error and hotspot
+            # score = new_qlosure_poly_heuristic(self.front_layer, self.extended_layer, temp_mapping_dict,
+            #                                     self.distance_matrix, self.node_data, self.decay_parameter, self.dag_dependencies_count, extended_layer_index, swap_gate,qubit_props=self.qubit_props,lambda_hot=0, alpha_usage=1, beta_error=0)
+            
+            # hostspot
+            # score = new_qlosure_poly_heuristic(self.front_layer, self.extended_layer, temp_mapping_dict,
+            #                                     self.distance_matrix, self.node_data, self.decay_parameter, self.dag_dependencies_count, extended_layer_index, swap_gate,qubit_props=self.qubit_props,lambda_hot=1, alpha_usage=1, beta_error=0)
+            
+            # depth rate
+            # score = depth_poly_heuristic(self.front_layer, self.extended_layer, temp_mapping_dict,
+            #                                     self.distance_matrix, self.node_data, self.decay_parameter, self.dag_dependencies_count, extended_layer_index, swap_gate,qubit_props=self.qubit_props,lambda_hot=1, alpha_usage=1, beta_error=0)
+            
+            # depth rate + error
+            # score = depth_poly_heuristic(self.front_layer, self.extended_layer, temp_mapping_dict,
+            #                                     self.distance_matrix, self.node_data, self.decay_parameter, self.dag_dependencies_count, extended_layer_index, swap_gate,qubit_props=self.qubit_props,lambda_hot=1, alpha_usage=1, beta_error=1)
+            
+
+
+
+            # # distance only
+            # score = distance_poly_heuristic(self.front_layer, self.extended_layer, temp_mapping_dict,
+            #                                     self.distance_matrix, self.node_data, self.decay_parameter, self.dag_dependencies_count, extended_layer_index, swap_gate)
+
             heuristic_score[swap_gate] = score
 
-        best_swap_gate = find_min_score_swap_gate(heuristic_score)
+        best_swap_gate = find_min_score_swap_gate(heuristic_score, seed=self.random_seed)
 
         swap_logical_physical_mappings(
             self.mapping_dict, self.reverse_mapping_dict, best_swap_gate, inplace=True
@@ -330,10 +367,17 @@ class Qlosure():
         # ---- Pass 1: find a good entry mapping for the loop body
         qlosure1 = Qlosure(self.backend_config, with_circuit=self.with_circuit)
 
-        # first pass to generate a good initial mapping
-        swap_count, depth, good_initial_mapping = qlosure1.run(loop_dag, loop_dag2q, heuristic_method="Qlosure",
-                                                               initial_mapping_method="custom", initial_mapping=self.mapping_dict, num_iter=3)
 
+        # ------- uncomment this for mapping -------------
+        # first pass to generate a good initial mapping
+        #@TODO : Make num iter = 3
+
+        # --------- comment this ----------------
+        good_initial_mapping = copy.deepcopy(self.mapping_dict)
+        before_loop_swaps = []
+        # -------------------------------------
+        swap_count, depth, good_initial_mapping = qlosure1.run(loop_dag, loop_dag2q, heuristic_method="Qlosure",
+                                                            initial_mapping_method="custom", initial_mapping=self.mapping_dict, num_iter=3)
         _, _, before_loop_swaps = solve_token_swapping(
             self.backend_connections,
             self.mapping_dict,
@@ -351,18 +395,28 @@ class Qlosure():
                     self.reverse_mapping_dict[p0], self.reverse_mapping_dict[p1])
 
             self._append_swap_entry([l0, l1], [p0, p1])
+            self.decay_parameter[p0] += 0.001
+            self.decay_parameter[p1] += 0.001
 
         # ---- Pass 2: compile the loop body from good_initial_mapping
+        # qlosure2 = Qlosure(self.backend_config, with_circuit=self.with_circuit,decay_parameter=self.decay_parameter)
         qlosure2 = Qlosure(self.backend_config, with_circuit=self.with_circuit)
         swap_count, depth, good_initial_mapping = qlosure2.run(loop_dag, loop_dag2q, heuristic_method="Qlosure",
                                                                initial_mapping_method="custom", initial_mapping=good_initial_mapping)
-
+        after_loop_swaps = []
         # Compute per-iteration END → START reconciliation (to make mapping invariant per iter)
         _, _, after_loop_swaps = solve_token_swapping(
             self.backend_connections,
             qlosure2.mapping_dict,
             good_initial_mapping,
         )
+        # use swaps obtained in Qlosure2
+
+        for swap in qlosure2.swap_history[::-1]:
+            p0, p1 = swap[1], swap[0]  # reverse the swap
+            after_loop_swaps.append((p0, p1))
+
+
 
         # Append those reconciliation swaps to the LOOP BODY itself (so they occur every iteration)
         # Use the branch/body's own reverse mapping to label logical qubits correctly
@@ -373,6 +427,8 @@ class Qlosure():
                 # body circuit uses physical indices
                 qlosure2.circuit.swap(p0, p1)
             qlosure2._append_swap_entry([l0, l1], [p0, p1])
+            self.decay_parameter[p0] += 0.001
+            self.decay_parameter[p1] += 0.001
 
         self.update_front_layer([loop_node_id])
 
@@ -456,6 +512,8 @@ class Qlosure():
                 mapping,
                 best_mapping,
             )
+
+            # swaps = []
 
             swaps_sequences_for_each_possibility[block_idx] = swaps
 
@@ -555,6 +613,22 @@ class Qlosure():
             "reconciliation_swaps": reconciliation_swaps or {}
         })
 
+    def _get_inserted_swaps(self) -> List[Tuple[int, int]]:
+        """Return list of all inserted swaps as (p0, p1) tuples."""
+        swaps = []
+        for item in self.get_structured_trace():
+            if item["type"] == "swap":
+                p0, p1 = item["physical_qubits"]
+                swaps.append((p0, p1))
+            # elif item["type"] in ["for", "while"]:
+            #     # recurse into body
+            #     sub_swaps = Qlosure._get_inserted_swaps_static(item["body"])
+            #     swaps.extend(sub_swaps)
+            # elif item["type"] == "if":
+            #     for branch in item["branches"]:
+            #         sub_swaps = Qlosure._get_inserted_swaps_static(branch["body"])
+            #         swaps.extend(sub_swaps)
+        return swaps
     def get_structured_trace(self) -> List[Dict[str, Any]]:
         """Return the top-level structured trace."""
         return self._trace_stack[0]
