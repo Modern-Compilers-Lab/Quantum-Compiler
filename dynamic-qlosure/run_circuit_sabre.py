@@ -1,7 +1,12 @@
 import argparse
 import json
+import os
+import sys
 import time
 from pathlib import Path
+
+# Add parent directory to path for shared qpu package
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from qiskit import QuantumCircuit, QuantumRegister
 from qiskit import qasm3

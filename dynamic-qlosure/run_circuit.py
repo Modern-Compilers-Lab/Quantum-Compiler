@@ -2,23 +2,24 @@ import argparse
 import json
 import logging
 import os
+import sys
 import time
 from pathlib import Path
 from typing import Dict, Tuple, Any
 
-from qiskit.qasm2 import dump
+# Add parent directory to path for shared qpu package
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
 from qiskit import qasm3
 
 from src.routing import Qlosure
 from src.dag import build_dag, extract_multi_qubit_dag
 from src.evaluation import compute_max_swaps_count, compute_quantum_depth, estimate_dynamic_circuit
 
-from qpu.src.load_backend import load_backend_edges
+from qpu.src.load_backend import load_backend_data
 from src.backend import QuantumBackend
 
 from qiskit import QuantumCircuit, QuantumRegister, ClassicalRegister
-
-from qiskit.circuit.controlflow import IfElseOp
 
 
 d_queko_benchmarks_dir = "../d-queko/benchmarks/"
@@ -48,14 +49,11 @@ qc = qasm3.load(qasm_file_path)
 end = time.time()
 print(f"⏱️ Circuit loaded in {end - start:.2f} seconds.")
 
-# Load backend edges
+# Load backend topology via the centralized loader
 print(f"Loading backend: {args.backend}")
-edges = load_backend_edges(args.backend)
-
-with open("/scratch/mb10324/Quantum-Compiler/d-queko/qpu/topologies/ibm_brisbane_old.json", 'r', encoding="utf-8") as fp:
-    ibm_brisbane_topology = json.load(fp)
-
-qubits_props = ibm_brisbane_topology.get("qubits", {})
+backend_data = load_backend_data(args.backend)
+edges = backend_data["coupling_map"]
+qubits_props = backend_data.get("qubits", {})
 print("✅ Backend topology loaded.")
 
 print("Preparing data structures...")
@@ -80,32 +78,26 @@ trace = poly_mapper.get_structured_trace()
 max_swaps = compute_max_swaps_count(trace, loop_iterations=10)
 quant_depth = compute_quantum_depth(
     trace, loop_iterations=10, use_physical_qubits=True)
-latency, error = estimate_dynamic_circuit(trace, qubit_props=ibm_brisbane_topology["qubits"], loop_iterations=10).values()
-
 
 print(f"Max swaps in trace: {max_swaps}")
 print(f"Quantum depth in trace: {quant_depth}")
-print(f"Latency in trace: {latency}")
-print(f"Error in trace: {error}")
 
-# # Create output directory based on circuit name
-# circuit_name = Path(args.circuit).stem
-# circuit_dir = "/".join(args.circuit.split('/')[:-1])
-# print(circuit_dir)
-# output_dir = Path("results_new") / circuit_dir / circuit_name
-# output_dir.mkdir(parents=True, exist_ok=True)
+if qubits_props:
+    latency, error = estimate_dynamic_circuit(
+        trace, qubit_props=qubits_props, loop_iterations=10).values()
+    print(f"Latency in trace: {latency}")
+    print(f"Error in trace: {error}")
 
-# # Save trace files with meaningful names
-# trace_txt_path = output_dir / f"{circuit_name}_trace.txt"
-# trace_json_path = output_dir / f"{circuit_name}_trace.json"
+# Create output directory based on circuit name
+circuit_name = Path(args.circuit).stem
+circuit_dir = "/".join(args.circuit.split('/')[:-1])
+output_dir = Path("results") / args.backend / circuit_dir / circuit_name
+output_dir.mkdir(parents=True, exist_ok=True)
 
-# with open(trace_txt_path, "w") as f:
-#     f.write(poly_mapper.format_structured_trace(trace))
-#     f.write("\n")
+# Save trace files
+trace_json_path = output_dir / f"{circuit_name}_trace.json"
 
-# with open(trace_json_path, "w") as f:
-#     json.dump(trace, f, indent=2)
+with open(trace_json_path, "w") as f:
+    json.dump(trace, f, indent=2)
 
-# print(f"Trace files written to {output_dir}/")
-
-# print("Trace written to trace.txt")
+print(f"Trace written to {trace_json_path}")

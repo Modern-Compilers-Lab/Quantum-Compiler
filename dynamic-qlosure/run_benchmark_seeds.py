@@ -1,19 +1,20 @@
 import argparse
 import json
-import logging
 import os
+import sys
 import time
 from pathlib import Path
-from typing import Dict, Tuple, Any
 
-from qiskit.qasm2 import dump
+# Add parent directory to path for shared qpu package
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
 from qiskit import qasm3
 
 from src.routing import Qlosure
 from src.dag import build_dag, extract_multi_qubit_dag
 from src.evaluation import compute_max_swaps_count, compute_quantum_depth
 
-from qpu.src.load_backend import load_backend_edges
+from qpu.src.load_backend import load_backend_data
 from src.backend import QuantumBackend
 
 from tqdm import tqdm
@@ -40,7 +41,6 @@ parser.add_argument("--template", type=str, default="nest0",
 args = parser.parse_args()
 
 d_queko_benchmarks_dir = Path(f"../d-queko/benchmarks/{args.template}/{args.bench}")
-backend_dir = Path(f"../d-queko/qpu/topologies/{args.backend}.json")
 results_dir = Path(f"results/qroqi/{args.template}/{args.backend}/{args.bench}")
 
 # queko-121qbt_nest_00_nodes010_leaf-depth-10/circ_00.qasm
@@ -351,17 +351,13 @@ if not d_queko_benchmarks_dir.exists():
     exit(1)
 
 
-with open(backend_dir, 'r', encoding="utf-8") as fp:
-    backend_topology = json.load(fp)
-    edges = backend_topology.get("coupling_map", [])
-    qubits_props = backend_topology.get("qubits", {})
+backend_data = load_backend_data(args.backend)
+edges = backend_data["coupling_map"]
+qubits_props = backend_data.get("qubits", {})
 
-    if not edges:
-        print(f"❌ No coupling information found in {backend_dir}")
-        exit(1)
-    if not qubits_props:
-        print(f"❌ No qubit properties found in {backend_dir}")
-        exit(1)
+if not edges:
+    print(f"\u274c No coupling information found for backend '{args.backend}'")
+    exit(1)
 
 backend = QuantumBackend(edges, qubit_props=qubits_props)
 

@@ -1,34 +1,23 @@
 import argparse
 import json
-import logging
 import os
+import sys
 import time
 from pathlib import Path
-from typing import Dict, Tuple, Any
 
-from qiskit.qasm2 import dump
+# Add parent directory to path for shared qpu package
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
 from qiskit import qasm3
+from qiskit import QuantumCircuit, QuantumRegister
+from qiskit.transpiler import PassManager, Layout, CouplingMap
+from qiskit.transpiler.passes import SabreSwap
 
-from src.routing import Qlosure
-from src.dag import build_dag, extract_multi_qubit_dag
-from src.evaluation import compute_max_swaps_count, compute_quantum_depth
-
-from qpu.src.load_backend import load_backend_edges
+from qpu.src.load_backend import load_backend_data
 from src.backend import QuantumBackend
+from src.parser import build_structured_trace_from_circuit, format_structured_trace
 
 from tqdm import tqdm
-
-from qiskit import QuantumCircuit, QuantumRegister, ClassicalRegister
-from qiskit.transpiler import PassManager
-from qiskit.transpiler.passes import SabreSwap, SabreLayout, EnlargeWithAncilla, FullAncillaAllocation
-from qiskit import transpile
-from qiskit import qasm3
-from qiskit.circuit.controlflow import IfElseOp
-from qiskit.transpiler import PassManager, Layout, CouplingMap
-from qiskit.transpiler.passes import SetLayout, ApplyLayout, SabreSwap
-
-from qpu.src.load_backend import load_backend_edges
-from src.parser import build_structured_trace_from_circuit, format_structured_trace
 
 
 # Argument parser setup
@@ -155,12 +144,11 @@ if not qasm_files_by_folder:
     print(f"❌ No .qasm files found in {bench_dir}")
     exit(1)
 
-# Load backend edges
+# Load backend topology
 print(f"Loading backend: {args.backend}")
-with open(f"/scratch/mb10324/Quantum-Compiler/d-queko/qpu/topologies/{args.backend}.json", 'r', encoding="utf-8") as fp:
-    ibm_brisbane_old_topology = json.load(fp)
-edges = ibm_brisbane_old_topology.get("coupling_map", [])
-qubits_props = ibm_brisbane_old_topology.get("qubits", {})
+backend_data = load_backend_data(args.backend)
+edges = backend_data["coupling_map"]
+qubits_props = backend_data.get("qubits", {})
 backend = QuantumBackend(edges, qubit_props=qubits_props)
 print("✅ Backend topology loaded.")
 

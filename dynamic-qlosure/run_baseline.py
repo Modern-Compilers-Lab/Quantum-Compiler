@@ -1,7 +1,12 @@
 import os
+import sys
 import time
 import argparse
 import csv
+
+# Add parent directory to path for shared qpu package
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
 from qiskit.qasm2 import dump
 from src.utils.isl_data_loader import json_file_to_isl
 from qpu.src.load_backend import load_backend_edges

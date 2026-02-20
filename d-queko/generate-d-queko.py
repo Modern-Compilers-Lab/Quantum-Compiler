@@ -202,11 +202,11 @@ def load_device(backend_name: str) -> nx.Graph:
     Load a device graph:
       • 'grid_MxN' to generate a grid on the fly
       • JSON path with {"coupling_map": [[u,v], ...]}
-      • Known names mapped under qpu/topologies/*.json
+      • Known names mapped under ../qpu/topologies/*.json
     """
 
-    # known map in qpu/topologies
-    TOPOLOGIES_DIR = "qpu/topologies"
+    # known map in ../qpu/topologies
+    TOPOLOGIES_DIR = "../qpu/topologies"
     BACKEND_FILE_MAP = {
         "fake_5q_v1": "fake_5q_v1.json",
         "fake_20q_v1": "fake_20q_v1.json",
@@ -233,7 +233,7 @@ def load_device(backend_name: str) -> nx.Graph:
         return G
 
     raise KeyError(
-        f"Unknown device '{backend_name}'. Use grid_MxN, a JSON path, or a known name in qpu/topologies/.")
+        f"Unknown device '{backend_name}'. Use grid_MxN, a JSON path, or a known name in ../qpu/topologies/.")
 
 
 def generate_dense_backend(n: int, density: float = 0.8, seed: int = 42) -> nx.Graph:
@@ -1028,7 +1028,7 @@ def build_argparser() -> argparse.ArgumentParser:
 
     # I/O & reproducibility
     # p.add_argument("--device", type=str, required=True,
-    #                help="grid_MxN, a JSON path, or known name in qpu/topologies/")
+    #                help="grid_MxN, a JSON path, or known name in ../qpu/topologies/")
 
     p.add_argument("--seed", type=int, default=1,
                    help="Seed for the STRUCTURE RNG (arguments and shape are frozen per benchmark)")
@@ -1112,7 +1112,7 @@ def main():
     g_cols = (nQ_target + g_rows - 1) // g_rows if nQ_target != 54 else 6
     # G = generate_heavy_grid(m=g_rows, n=g_cols)
     G = load_gml_device(
-        f"qpu/dqueko/backend_{nQ_target}_qubits_seed_42_density_0.3.gml")
+        f"../qpu/dqueko/backend_{nQ_target}_qubits_seed_42_density_0.3.gml")
     nQ = nQ_target
 
     if nQ > G.number_of_nodes():
@@ -1223,7 +1223,7 @@ def main():
             "circuits": [os.path.basename(p) for p in circ_paths],
             "args": {
                 "seed": int(args.seed),
-                "device": f"qpu/dqueko/backend_{nQ_target}_qubits_seed_42_density_0.3.gml",
+                "device": f"../qpu/dqueko/backend_{nQ_target}_qubits_seed_42_density_0.3.gml",
                 "n_qubits": int(nQ),
                 "conflict_level": int(args.conflict_level),
             },

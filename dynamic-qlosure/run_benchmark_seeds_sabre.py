@@ -1,13 +1,19 @@
 import argparse
 import json
+import os
+import sys
 import time
 from pathlib import Path
+
+# Add parent directory to path for shared qpu package
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from qiskit import qasm3
 from qiskit import QuantumCircuit, QuantumRegister
 from qiskit.transpiler import PassManager, Layout, CouplingMap
 from qiskit.transpiler.passes import SabreSwap
 
+from qpu.src.load_backend import load_backend_data
 from src.backend import QuantumBackend
 from src.parser import build_structured_trace_from_circuit
 
@@ -35,7 +41,6 @@ args = parser.parse_args()
 
 # Derived paths
 d_queko_benchmarks_dir = Path(f"../d-queko/benchmarks/{args.template}/{args.bench}")
-backend_dir = Path(f"../d-queko/qpu/topologies/{args.backend}.json")
 results_dir = Path(f"results/sabre/{args.template}/{args.backend}/{args.bench}")
 
 # Pre-selected circuits for each backend/bench/depth
@@ -317,21 +322,14 @@ if not d_queko_benchmarks_dir.exists():
     print(f"❌ Benchmark directory {d_queko_benchmarks_dir} does not exist!")
     raise SystemExit(1)
 
-if not backend_dir.exists():
-    print(f"❌ Backend topology file not found: {backend_dir}")
+# Load backend topology via centralized loader
+backend_data = load_backend_data(args.backend)
+edges = backend_data["coupling_map"]
+qubits_props = backend_data.get("qubits", {})
+
+if not edges:
+    print(f"❌ No coupling information found for backend '{args.backend}'")
     raise SystemExit(1)
-
-# Load backend topology JSON
-with open(backend_dir, 'r', encoding="utf-8") as fp:
-    backend_topology = json.load(fp)
-    edges = backend_topology.get("coupling_map", [])
-    qubits_props = backend_topology.get("qubits", {})
-
-    if not edges:
-        print(f"❌ No coupling information found in {backend_dir}")
-        raise SystemExit(1)
-    if qubits_props is None:
-        qubits_props = {}
 
 num_phys_qubits = infer_num_qubits(edges, qubits_props)
 coupling_map = CouplingMap(edges)
