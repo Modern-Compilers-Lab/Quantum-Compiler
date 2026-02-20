@@ -18,11 +18,9 @@ from src.evaluation import compute_max_swaps_count, compute_quantum_depth, estim
 
 from qpu.src.load_backend import load_backend_data
 from src.backend import QuantumBackend
+from src.results_utils import RESULTS_ROOT, D_QUEKO_BENCHMARKS_DIR, save_trace_results
 
-from qiskit import QuantumCircuit, QuantumRegister, ClassicalRegister
-
-
-d_queko_benchmarks_dir = "../d-queko/benchmarks/"
+from qiskit import QuantumCircuit, QuantumRegister
 
 # Argument parser setup
 parser = argparse.ArgumentParser(
@@ -42,7 +40,7 @@ args = parser.parse_args()
 
 # Load circuit data
 print(f"Loading circuit from: {args.circuit}")
-qasm_file_path = Path(d_queko_benchmarks_dir) / args.circuit
+qasm_file_path = D_QUEKO_BENCHMARKS_DIR / args.circuit
 print(f"Full path: {qasm_file_path.resolve()}")
 start = time.time()
 qc = qasm3.load(qasm_file_path)
@@ -88,16 +86,10 @@ if qubits_props:
     print(f"Latency in trace: {latency}")
     print(f"Error in trace: {error}")
 
-# Create output directory based on circuit name
+# Save results
 circuit_name = Path(args.circuit).stem
-circuit_dir = "/".join(args.circuit.split('/')[:-1])
-output_dir = Path("results") / args.backend / circuit_dir / circuit_name
-output_dir.mkdir(parents=True, exist_ok=True)
+circuit_dir = str(Path(args.circuit).parent)
+output_dir = RESULTS_ROOT / "qlosure" / args.backend / circuit_dir / circuit_name
+save_trace_results(output_dir, trace, qlosure_end_time - start, qasm_file_path)
 
-# Save trace files
-trace_json_path = output_dir / f"{circuit_name}_trace.json"
-
-with open(trace_json_path, "w") as f:
-    json.dump(trace, f, indent=2)
-
-print(f"Trace written to {trace_json_path}")
+print(f"Results written to {output_dir}")

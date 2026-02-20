@@ -10,6 +10,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from qiskit.qasm2 import dump
 from src.utils.isl_data_loader import json_file_to_isl
 from qpu.src.load_backend import load_backend_edges
+from src.results_utils import RESULTS_ROOT
 from baselines.sabre import run_sabre
 from baselines.qmap import run_qmap
 from baselines.pytket import run_pytket
@@ -35,7 +36,7 @@ benchmarks_folder_path = f"benchmarks/polyhedral/{args.benchmark}"
 edges = load_backend_edges(args.backend)
 all_files = os.listdir(benchmarks_folder_path)
 
-results_dir = "results/stats"
+results_dir = RESULTS_ROOT / "baselines" / args.backend
 os.makedirs(results_dir, exist_ok=True)
 
 
@@ -59,8 +60,8 @@ algorithms_to_run = ALGORITHMS if args.algorithm == "all" else [args.algorithm]
 # Create a CSV file for each algorithm selected
 csv_paths = {}
 for algorithm in algorithms_to_run:
-    csv_filename = f"{args.benchmark}_{args.backend}_trivial_{algorithm}.csv"
-    csv_path = os.path.join(results_dir, csv_filename)
+    csv_filename = f"{args.benchmark}_trivial_{algorithm}.csv"
+    csv_path = results_dir / csv_filename
     if os.path.exists(csv_path):
         os.remove(csv_path)
     csv_paths[algorithm] = csv_path

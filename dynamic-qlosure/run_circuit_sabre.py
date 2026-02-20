@@ -16,13 +16,11 @@ from qiskit.transpiler.passes import SabreSwap
 from qpu.src.load_backend import load_backend_edges
 from src.backend import QuantumBackend
 from src.parser import build_structured_trace_from_circuit, format_structured_trace
+from src.results_utils import RESULTS_ROOT, D_QUEKO_BENCHMARKS_DIR, save_trace_results
 from src.evaluation import (
     compute_max_swaps_count,
     compute_quantum_depth,
 )
-
-# Root directory for D-QUeKO benchmarks
-D_QUEKO_BENCHMARKS_DIR = "../d-queko/benchmarks/"
 
 
 def route_single_circuit(qasm_path: Path, backend: QuantumBackend, verbose: bool = True):
@@ -78,7 +76,7 @@ def route_single_circuit(qasm_path: Path, backend: QuantumBackend, verbose: bool
     quant_depth = compute_quantum_depth(
         trace, loop_iterations=100, use_physical_qubits=True)
 
-    return trace, max_swaps, quant_depth, routed_qc
+    return trace, max_swaps, quant_depth, routed_qc, sabre_secs
 
 
 def main():
@@ -97,7 +95,7 @@ def main():
     args = parser.parse_args()
 
     # Resolve circuit path
-    qasm_file_path = Path(D_QUEKO_BENCHMARKS_DIR) / args.circuit
+    qasm_file_path = D_QUEKO_BENCHMARKS_DIR / args.circuit
     print(f"Loading circuit from: {args.circuit}")
     print(f"Full path: {qasm_file_path.resolve()}")
 
@@ -108,7 +106,7 @@ def main():
     print("✅ Backend topology loaded.")
 
     try:
-        trace, max_swaps, quant_depth, _ = route_single_circuit(
+        trace, max_swaps, quant_depth, _, elapsed = route_single_circuit(
             qasm_file_path, backend, verbose=bool(args.verbose))
     except Exception as e:
         print(f"❌ Error while routing: {e}")
@@ -118,24 +116,15 @@ def main():
     print(f"Max swaps in trace: {max_swaps}")
     print(f"Quantum depth in trace: {quant_depth}")
 
-    # Write results next to a deterministic folder mirroring circuit's location
+    # Write results to a deterministic folder mirroring circuit's location
     circuit_path_obj = Path(args.circuit)
     circuit_name = circuit_path_obj.stem
     relative_parent = circuit_path_obj.parent
 
-    output_dir = Path("results_tmp/sabre") / relative_parent / circuit_name
-    output_dir.mkdir(parents=True, exist_ok=True)
+    output_dir = RESULTS_ROOT / "sabre" / args.backend / relative_parent / circuit_name
+    save_trace_results(output_dir, trace, elapsed, qasm_file_path)
 
-    trace_json_path = output_dir / f"{circuit_name}_trace.json"
-    trace_txt_path = output_dir / f"{circuit_name}_trace.txt"
-    with open(trace_json_path, "w") as f:
-        json.dump(trace, f, indent=2)
-
-    with open(trace_txt_path, "w") as f:
-        f.write(format_structured_trace(trace))
-        f.write("\n")
-
-    print(f"Trace JSON written to: {trace_json_path}")
+    print(f"Results written to: {output_dir}")
 
 
 if __name__ == "__main__":

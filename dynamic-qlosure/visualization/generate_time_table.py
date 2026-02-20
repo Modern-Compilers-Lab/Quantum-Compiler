@@ -1,6 +1,7 @@
 from pathlib import Path
 import statistics as stats
 import numpy as np
+from src.results_utils import RESULTS_ROOT
 
 # ---------- Load helpers ----------
 
@@ -48,9 +49,13 @@ def average_over_bins(times_by_depth: dict, bins=DEPTH_BINS):
 def print_qroqi_vs_sabre_summary(
     topology_name="ibm_kingston",
     sizes=(54, 81, 121),
-    qroqi_root="results_time/qroqi/one_loop",
-    sabre_root="results_time/sabre/one_loop",
+    qroqi_root=None,
+    sabre_root=None,
 ):
+    if qroqi_root is None:
+        qroqi_root = str(RESULTS_ROOT / "qlosure" / "one_loop")
+    if sabre_root is None:
+        sabre_root = str(RESULTS_ROOT / "sabre" / "one_loop")
     qroqi_base = Path(qroqi_root) / topology_name
     sabre_base = Path(sabre_root) / topology_name
 

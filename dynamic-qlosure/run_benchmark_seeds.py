@@ -16,6 +16,7 @@ from src.evaluation import compute_max_swaps_count, compute_quantum_depth
 
 from qpu.src.load_backend import load_backend_data
 from src.backend import QuantumBackend
+from src.results_utils import RESULTS_ROOT, D_QUEKO_BENCHMARKS_DIR, save_trace_results
 
 from tqdm import tqdm
 
@@ -24,12 +25,11 @@ from tqdm import tqdm
 parser = argparse.ArgumentParser(
     description="Run Qlosure with optional parameters")
 parser.add_argument("--bench", type=str,
-                    default="54qbt" ,
-                    choices=["54qbt", "81qbt", "121qbt"],
-                    help="Benchmark folder name either 54qbt, 81qbt, or 121qbt")
+                    default="54qbt",
+                    help="Benchmark folder name (e.g. 54qbt, 81qbt, 121qbt, 256qbt)")
 parser.add_argument("--backend", type=str,
-                    default="ibm_kingston", choices=["ibm_kingston", "ibm_brisbane","ibm_brisbane_old"],
-                    help="Name of the backend (either ibm_kingston or ibm_brisbane or ibm_brisbane_old)")
+                    default="ibm_kingston",
+                    help="Name of the backend (any registered backend in qpu/topologies)")
 parser.add_argument("--initial", type=str, default="trivial",
                     help="Initial mapping method")
 parser.add_argument("--verbose", type=int, default=0, help="Verbosity level")
@@ -40,8 +40,8 @@ parser.add_argument("--template", type=str, default="nest0",
                     help="Template type for D-QuEKO circuits")
 args = parser.parse_args()
 
-d_queko_benchmarks_dir = Path(f"../d-queko/benchmarks/{args.template}/{args.bench}")
-results_dir = Path(f"results/qroqi/{args.template}/{args.backend}/{args.bench}")
+d_queko_benchmarks_dir = D_QUEKO_BENCHMARKS_DIR / args.template / args.bench
+results_root = RESULTS_ROOT / "qlosure" / args.template / args.backend / args.bench
 
 # queko-121qbt_nest_00_nodes010_leaf-depth-10/circ_00.qasm
 circuits_to_use_0 = {
@@ -113,6 +113,98 @@ circuits_to_use_0 = {
             "leaf-depth-70": "queko-121qbt_nest_00_nodes010_leaf-depth-70/circ_09.qasm",
             "leaf-depth-80": "queko-121qbt_nest_00_nodes010_leaf-depth-80/circ_07.qasm",
             "leaf-depth-90": "queko-121qbt_nest_00_nodes010_leaf-depth-90/circ_06.qasm"
+        }
+    },
+    "heavy_hexagon": {
+        "54qbt": {
+            "leaf-depth-10": "queko-054qbt_nest_00_nodes010_leaf-depth-10/circ_00.qasm",
+            "leaf-depth-20": "queko-054qbt_nest_00_nodes010_leaf-depth-20/circ_00.qasm",
+            "leaf-depth-30": "queko-054qbt_nest_00_nodes010_leaf-depth-30/circ_00.qasm",
+            "leaf-depth-40": "queko-054qbt_nest_00_nodes010_leaf-depth-40/circ_00.qasm",
+            "leaf-depth-50": "queko-054qbt_nest_00_nodes010_leaf-depth-50/circ_00.qasm",
+            "leaf-depth-60": "queko-054qbt_nest_00_nodes010_leaf-depth-60/circ_00.qasm",
+            "leaf-depth-70": "queko-054qbt_nest_00_nodes010_leaf-depth-70/circ_00.qasm",
+            "leaf-depth-80": "queko-054qbt_nest_00_nodes010_leaf-depth-80/circ_00.qasm",
+            "leaf-depth-90": "queko-054qbt_nest_00_nodes010_leaf-depth-90/circ_00.qasm"
+        },
+        "81qbt": {
+            "leaf-depth-10": "queko-081qbt_nest_00_nodes010_leaf-depth-10/circ_00.qasm",
+            "leaf-depth-20": "queko-081qbt_nest_00_nodes010_leaf-depth-20/circ_00.qasm",
+            "leaf-depth-30": "queko-081qbt_nest_00_nodes010_leaf-depth-30/circ_00.qasm",
+            "leaf-depth-40": "queko-081qbt_nest_00_nodes010_leaf-depth-40/circ_00.qasm",
+            "leaf-depth-50": "queko-081qbt_nest_00_nodes010_leaf-depth-50/circ_00.qasm",
+            "leaf-depth-60": "queko-081qbt_nest_00_nodes010_leaf-depth-60/circ_00.qasm",
+            "leaf-depth-70": "queko-081qbt_nest_00_nodes010_leaf-depth-70/circ_00.qasm",
+            "leaf-depth-80": "queko-081qbt_nest_00_nodes010_leaf-depth-80/circ_00.qasm",
+            "leaf-depth-90": "queko-081qbt_nest_00_nodes010_leaf-depth-90/circ_00.qasm"
+        },
+        "121qbt": {
+            "leaf-depth-10": "queko-121qbt_nest_00_nodes010_leaf-depth-10/circ_00.qasm",
+            "leaf-depth-20": "queko-121qbt_nest_00_nodes010_leaf-depth-20/circ_00.qasm",
+            "leaf-depth-30": "queko-121qbt_nest_00_nodes010_leaf-depth-30/circ_00.qasm",
+            "leaf-depth-40": "queko-121qbt_nest_00_nodes010_leaf-depth-40/circ_00.qasm",
+            "leaf-depth-50": "queko-121qbt_nest_00_nodes010_leaf-depth-50/circ_00.qasm",
+            "leaf-depth-60": "queko-121qbt_nest_00_nodes010_leaf-depth-60/circ_00.qasm",
+            "leaf-depth-70": "queko-121qbt_nest_00_nodes010_leaf-depth-70/circ_00.qasm",
+            "leaf-depth-80": "queko-121qbt_nest_00_nodes010_leaf-depth-80/circ_00.qasm",
+            "leaf-depth-90": "queko-121qbt_nest_00_nodes010_leaf-depth-90/circ_00.qasm"
+        },
+        "256qbt": {
+            "leaf-depth-10": "queko-256qbt_nest_00_nodes010_leaf-depth-10/circ_00.qasm",
+            "leaf-depth-20": "queko-256qbt_nest_00_nodes010_leaf-depth-20/circ_00.qasm",
+            "leaf-depth-30": "queko-256qbt_nest_00_nodes010_leaf-depth-30/circ_00.qasm",
+            "leaf-depth-40": "queko-256qbt_nest_00_nodes010_leaf-depth-40/circ_00.qasm",
+            "leaf-depth-50": "queko-256qbt_nest_00_nodes010_leaf-depth-50/circ_00.qasm",
+            "leaf-depth-60": "queko-256qbt_nest_00_nodes010_leaf-depth-60/circ_00.qasm",
+            "leaf-depth-70": "queko-256qbt_nest_00_nodes010_leaf-depth-70/circ_00.qasm",
+            "leaf-depth-80": "queko-256qbt_nest_00_nodes010_leaf-depth-80/circ_00.qasm",
+            "leaf-depth-90": "queko-256qbt_nest_00_nodes010_leaf-depth-90/circ_00.qasm"
+        }
+    },
+    "ibm_flamingo": {
+        "54qbt": {
+            "leaf-depth-10": "queko-054qbt_nest_00_nodes010_leaf-depth-10/circ_00.qasm",
+            "leaf-depth-20": "queko-054qbt_nest_00_nodes010_leaf-depth-20/circ_00.qasm",
+            "leaf-depth-30": "queko-054qbt_nest_00_nodes010_leaf-depth-30/circ_00.qasm",
+            "leaf-depth-40": "queko-054qbt_nest_00_nodes010_leaf-depth-40/circ_00.qasm",
+            "leaf-depth-50": "queko-054qbt_nest_00_nodes010_leaf-depth-50/circ_00.qasm",
+            "leaf-depth-60": "queko-054qbt_nest_00_nodes010_leaf-depth-60/circ_00.qasm",
+            "leaf-depth-70": "queko-054qbt_nest_00_nodes010_leaf-depth-70/circ_00.qasm",
+            "leaf-depth-80": "queko-054qbt_nest_00_nodes010_leaf-depth-80/circ_00.qasm",
+            "leaf-depth-90": "queko-054qbt_nest_00_nodes010_leaf-depth-90/circ_00.qasm"
+        },
+        "81qbt": {
+            "leaf-depth-10": "queko-081qbt_nest_00_nodes010_leaf-depth-10/circ_00.qasm",
+            "leaf-depth-20": "queko-081qbt_nest_00_nodes010_leaf-depth-20/circ_00.qasm",
+            "leaf-depth-30": "queko-081qbt_nest_00_nodes010_leaf-depth-30/circ_00.qasm",
+            "leaf-depth-40": "queko-081qbt_nest_00_nodes010_leaf-depth-40/circ_00.qasm",
+            "leaf-depth-50": "queko-081qbt_nest_00_nodes010_leaf-depth-50/circ_00.qasm",
+            "leaf-depth-60": "queko-081qbt_nest_00_nodes010_leaf-depth-60/circ_00.qasm",
+            "leaf-depth-70": "queko-081qbt_nest_00_nodes010_leaf-depth-70/circ_00.qasm",
+            "leaf-depth-80": "queko-081qbt_nest_00_nodes010_leaf-depth-80/circ_00.qasm",
+            "leaf-depth-90": "queko-081qbt_nest_00_nodes010_leaf-depth-90/circ_00.qasm"
+        },
+        "121qbt": {
+            "leaf-depth-10": "queko-121qbt_nest_00_nodes010_leaf-depth-10/circ_00.qasm",
+            "leaf-depth-20": "queko-121qbt_nest_00_nodes010_leaf-depth-20/circ_00.qasm",
+            "leaf-depth-30": "queko-121qbt_nest_00_nodes010_leaf-depth-30/circ_00.qasm",
+            "leaf-depth-40": "queko-121qbt_nest_00_nodes010_leaf-depth-40/circ_00.qasm",
+            "leaf-depth-50": "queko-121qbt_nest_00_nodes010_leaf-depth-50/circ_00.qasm",
+            "leaf-depth-60": "queko-121qbt_nest_00_nodes010_leaf-depth-60/circ_00.qasm",
+            "leaf-depth-70": "queko-121qbt_nest_00_nodes010_leaf-depth-70/circ_00.qasm",
+            "leaf-depth-80": "queko-121qbt_nest_00_nodes010_leaf-depth-80/circ_00.qasm",
+            "leaf-depth-90": "queko-121qbt_nest_00_nodes010_leaf-depth-90/circ_00.qasm"
+        },
+        "256qbt": {
+            "leaf-depth-10": "queko-256qbt_nest_00_nodes010_leaf-depth-10/circ_00.qasm",
+            "leaf-depth-20": "queko-256qbt_nest_00_nodes010_leaf-depth-20/circ_00.qasm",
+            "leaf-depth-30": "queko-256qbt_nest_00_nodes010_leaf-depth-30/circ_00.qasm",
+            "leaf-depth-40": "queko-256qbt_nest_00_nodes010_leaf-depth-40/circ_00.qasm",
+            "leaf-depth-50": "queko-256qbt_nest_00_nodes010_leaf-depth-50/circ_00.qasm",
+            "leaf-depth-60": "queko-256qbt_nest_00_nodes010_leaf-depth-60/circ_00.qasm",
+            "leaf-depth-70": "queko-256qbt_nest_00_nodes010_leaf-depth-70/circ_00.qasm",
+            "leaf-depth-80": "queko-256qbt_nest_00_nodes010_leaf-depth-80/circ_00.qasm",
+            "leaf-depth-90": "queko-256qbt_nest_00_nodes010_leaf-depth-90/circ_00.qasm"
         }
     },
     "ibm_brisbane_old": {
@@ -321,21 +413,8 @@ def run_circuit(circuit_path,circuit_config, backend, initial_mapping, num_itera
         circuit_name = circuit_path_obj.stem
 
 
-        output_dir = results_dir / circuit_config /f"SEED_{seed}"
-        output_dir.mkdir(parents=True, exist_ok=True)
-
-        trace_json_path = output_dir / f"trace.json"
-        time_txt_path = output_dir / f"time.txt"
-        file_path = output_dir / f"path.txt"
-        # save time
-
-        with open(time_txt_path, "w") as f:
-            f.write(f"{qlosure_end_time - start:.6f}\n")
-
-        with open(trace_json_path, "w") as f:
-            json.dump(trace, f, indent=2)
-        with open(file_path, "w") as f:
-            f.write(str(circuit_path))
+        output_dir = results_root / circuit_config / f"SEED_{seed}"
+        save_trace_results(output_dir, trace, qlosure_end_time - start, circuit_path)
         
 
 

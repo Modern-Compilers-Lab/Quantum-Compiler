@@ -5,6 +5,7 @@ import statistics as stats
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from src.results_utils import RESULTS_ROOT
 
 
 def collect_times_by_depth(method_root: Path, qubits: int):
@@ -96,7 +97,7 @@ def plot_qroqi_time_three_sizes(
     plt.rcParams["pdf.fonttype"] = 42  # embed text as text
     plt.rcParams["ps.fonttype"] = 42
 
-    method_root = Path(f"results_time/qroqi/one_loop/{topology_name}")
+    method_root = RESULTS_ROOT / "qlosure" / "one_loop" / topology_name
 
 
     # ---- Collect data ----

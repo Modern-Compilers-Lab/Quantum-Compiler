@@ -4,16 +4,16 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 from src.evaluation import compute_max_swaps_count, compute_quantum_depth, estimate_dynamic_circuit
+from src.results_utils import RESULTS_ROOT, RESULTS_SUMMARY_ROOT, load_topology
 
 def compute_routing_metrics_to_csv(nb_qubits, nb_loop_iterations, topology_name, output_csv_path , template="nest0"):
     """
     Compute average + std stats for both methods and save results as CSV.
     """
-    with open(f"/scratch/mb10324/Quantum-Compiler/d-queko/qpu/topologies/{topology_name}.json", 'r', encoding="utf-8") as fp:
-        ibm_topology = json.load(fp)
+    ibm_topology = load_topology(topology_name)
 
-    results_dir = f'xxresults_seeds/qroqi/nest2/{topology_name}/{nb_qubits}qbt'
-    sabre_dir = f'xxresults_seeds/sabre/nest2/{topology_name}/{nb_qubits}qbt'
+    results_dir = str(RESULTS_ROOT / "qlosure" / template / topology_name / f"{nb_qubits}qbt")
+    sabre_dir = str(RESULTS_ROOT / "sabre" / template / topology_name / f"{nb_qubits}qbt")
 
     def collect_json_files(root_dir):
         files = []
@@ -63,16 +63,12 @@ def compute_routing_metrics_ablation_to_csv(nb_qubits, nb_loop_iterations, topol
     """
     Compute average + std stats for both methods and save results as CSV.
     """
-    with open(f"/scratch/mb10324/Quantum-Compiler/d-queko/qpu/topologies/{topology_name}.json", 'r', encoding="utf-8") as fp:
-        ibm_topology = json.load(fp)
+    ibm_topology = load_topology(topology_name)
 
-    results_dir0 = f'results_seeds/{topology_name}/{template}/{nb_qubits}qbt'
-    results_dir1 = f'results_seeds_no_remaping/{topology_name}/{template}/{nb_qubits}qbt'
-    results_dir2 = f'results_seeds_no_remaping_no_error/{topology_name}/{template}/{nb_qubits}qbt'
-    results_dir3 = f'results_no_remap_no_error_with_depth_rate_with_error/qroqi/{template}/{topology_name}/{nb_qubits}qbt'
-    # results_dir4 = f'results_seeds_depth_rate_with_error/{topology_name}/{template}/{nb_qubits}qbt'
-    # results_dir5 = f'results_seeds_depth_rate_without_error/{topology_name}/{template}/{nb_qubits}qbt'
-    # results_dir5 = f'results_seeds_depth_rate_without_error/{topology_name}/{template}/{nb_qubits}qbt'
+    results_dir0 = str(RESULTS_ROOT / "qlosure" / template / topology_name / f"{nb_qubits}qbt")
+    results_dir1 = str(RESULTS_ROOT / "qlosure_no_remap" / template / topology_name / f"{nb_qubits}qbt")
+    results_dir2 = str(RESULTS_ROOT / "qlosure_no_remap_no_error" / template / topology_name / f"{nb_qubits}qbt")
+    results_dir3 = str(RESULTS_ROOT / "qlosure_no_remap_no_error_depth_rate" / template / topology_name / f"{nb_qubits}qbt")
 
 
     def collect_json_files(root_dir):
@@ -143,5 +139,5 @@ if __name__ == "__main__":
                 nb_qubits=nq,
                 nb_loop_iterations=LOOP_ITERATIONS,
                 topology_name=backend,
-                output_csv_path=f"results-summary/ablation_study5/{backend}_{nq}qbt_{LOOP_ITERATIONS}iter_metrics_ablation_study.csv"
+                output_csv_path=str(RESULTS_SUMMARY_ROOT / f"ablation_study5/{backend}_{nq}qbt_{LOOP_ITERATIONS}iter_metrics_ablation_study.csv")
             )

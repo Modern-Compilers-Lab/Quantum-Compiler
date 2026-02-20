@@ -16,6 +16,7 @@ from src.evaluation import compute_max_swaps_count, compute_quantum_depth
 
 from qpu.src.load_backend import load_backend_data
 from src.backend import QuantumBackend
+from src.results_utils import RESULTS_ROOT, D_QUEKO_BENCHMARKS_DIR, save_trace_results
 
 from tqdm import tqdm
 
@@ -42,8 +43,8 @@ parser.add_argument("--template", type=str, default="nest0",
 args = parser.parse_args()
 
 
-d_queko_benchmarks_dir = f"../d-queko/benchmarks/wi_rule_benchmarks/{args.bench}/{args.leaf_depth}Leaf_depth/"
-results_root_dir = f"results_wi_rule/qroqi/{args.bench}/{args.backend}/{args.leaf_depth}Leaf_depth/"
+d_queko_benchmarks_dir = D_QUEKO_BENCHMARKS_DIR / "wi_rule_benchmarks" / args.bench / f"{args.leaf_depth}Leaf_depth"
+results_root_dir = RESULTS_ROOT / "qlosure" / "wi_rule" / args.backend / args.bench / f"{args.leaf_depth}Leaf_depth"
 
 
 def find_qasm_files(bench_dir):
@@ -88,20 +89,10 @@ def run_circuit(circuit_path, backend, initial_mapping, num_iterations, verbose)
         circuit_path_obj = Path(circuit_path)
         circuit_name = circuit_path_obj.stem
         relative_path = circuit_path_obj.relative_to(
-            Path(d_queko_benchmarks_dir))
+            d_queko_benchmarks_dir)
 
-        output_dir = Path(results_root_dir)/relative_path.parent /circuit_name
-        output_dir.mkdir(parents=True, exist_ok=True)
-
-        # trace_txt_path = output_dir / f"{circuit_name}_trace.txt"
-        trace_json_path = output_dir / f"{circuit_name}_trace.json"
-
-        # with open(trace_txt_path, "w") as f:
-        #     f.write(poly_mapper.format_structured_trace(trace))
-        #     f.write("\n")
-
-        with open(trace_json_path, "w") as f:
-            json.dump(trace, f, indent=2)
+        output_dir = results_root_dir / relative_path.parent / circuit_name
+        save_trace_results(output_dir, trace, qlosure_end_time - start, circuit_path)
 
         return True, None, None
 
@@ -111,7 +102,7 @@ def run_circuit(circuit_path, backend, initial_mapping, num_iterations, verbose)
 
 
 # Main execution
-bench_dir = Path(d_queko_benchmarks_dir)
+bench_dir = d_queko_benchmarks_dir
 
 if not bench_dir.exists():
     print(f"❌ Benchmark directory {bench_dir} does not exist!")
