@@ -35,7 +35,7 @@ def route_single_circuit(qasm_path: Path, backend: QuantumBackend, verbose: bool
 
     # NOTE: Some topologies include an unused index; match prior code's -1
     num_physical_qubits = backend.num_qubits - 1
-    print(f"Backend has {num_physical_qubits} physical qubits.")
+
     if num_physical_qubits < len(qc.qubits):
         raise ValueError(
             f"Backend has {num_physical_qubits} qubits but circuit needs {len(qc.qubits)}."
@@ -86,7 +86,7 @@ def main():
         help="Path to circuit relative to D-QUeKO benchmarks root",
     )
     parser.add_argument("--backend", type=str,
-                        default="ibm_sherbrooke", help="Backend name for topology")
+                        default="ibm_brisbane", help="Backend name for topology")
     parser.add_argument("--verbose", type=int, default=1,
                         help="Verbosity (0/1)")
     args = parser.parse_args()
@@ -118,7 +118,7 @@ def main():
     circuit_name = circuit_path_obj.stem
     relative_parent = circuit_path_obj.parent
 
-    output_dir = Path("results_sabre") / relative_parent / circuit_name
+    output_dir = Path("results_tmp/sabre") / relative_parent / circuit_name
     output_dir.mkdir(parents=True, exist_ok=True)
 
     trace_json_path = output_dir / f"{circuit_name}_trace.json"

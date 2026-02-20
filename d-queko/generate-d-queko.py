@@ -708,10 +708,10 @@ class ProgramBuilder:
                 return k
         return "leaf"
 
-    def _make_leaf_spec(self, name: str, depth_factor: float = 1) -> LeafSpec:
+    def _make_leaf_spec(self, name: str, depth_factor: float = 1, override_depth: Optional[int] = None) -> LeafSpec:
         size = self.P.nbQubits
 
-        depth = self.P.leaf_depth
+        depth = self.P.leaf_depth if override_depth is None else override_depth
         alpha, beta = self.P.leaf_density
         return LeafSpec(
             device=self.G,
@@ -735,12 +735,108 @@ class ProgramBuilder:
             return "for" if r < 0.5 else "while"
         return "for" if r < (pfor / total) else "while"
 
-    def _make_seq_block(self, level: int, tag: str) -> Node:
+    def _make_seq_block(self, level: int, tag: str, depth_factor: float = 1.0) -> Node:
         """Small sequential block (a few leaves)."""
 
         kids: List[Node] = []
-        kids.append(self._make_leaf_spec(f"Leaf_L{level}_{tag}"))
+        kids.append(self._make_leaf_spec(f"Leaf_L{level}_{tag}", depth_factor=depth_factor))
         return Seq(*kids)
+
+
+
+    def _simple_if_leaves(self, tag: str) -> Node:
+        """Build: if(){ leaf } else { leaf }"""
+        cq = self._rand_cond_qubit()
+        then_leaf = self._make_leaf_spec(f"{tag}_ThenLeaf", override_depth=3)
+        else_leaf = self._make_leaf_spec(f"{tag}_ElseLeaf", override_depth=3)
+        if_else =  IfElse(cq, then_leaf, else_leaf,
+                      conflict_level=self.P.conflict_level,
+                      name=f"{tag}_IfLeaves")
+
+        pre_if_else_seq = self._make_seq_block(0, f"{tag}_Pre")
+        post_if_else_seq = self._make_seq_block(0, f"{tag}_Post")
+
+        return Seq(pre_if_else_seq, if_else, post_if_else_seq)
+    
+    def _while_of_if_leaves(self, tag: str) -> Node:
+        """Build: while(){ if(){leaf}else{leaf} }"""
+        cqw = self._rand_cond_qubit()
+        inner_if = self._simple_if_leaves(f"{tag}_Inner")
+        return WhileLoop(cqw, inner_if, name=f"{tag}_WhileOfIf")
+
+    def _equal_template_depth(self, D: int, tag: str) -> Node:
+        """
+        E(1): while{ if{leaf}else{leaf} }
+        E(D): while{ if{ E(D-1) } else { E(D-1) } }, D>=2
+        """
+        if D <= 1:
+            # Base
+            cqw = self._rand_cond_qubit()
+            inner_if = self._simple_if_leaves(f"{tag}_D1")
+            # return WhileLoop(cqw, inner_if, name=f"{tag}_E1_While")
+            # for loop version
+            K = 10
+            return ForLoop(K, inner_if, name=f"{tag}_E1_For")
+
+        # Recursive step
+        sub = self._equal_template_depth(D - 1, f"{tag}_D{D-1}")
+        cqi = self._rand_cond_qubit()
+        inner_if = IfElse(cqi, sub, sub,
+                          conflict_level=self.P.conflict_level,
+                          name=f"{tag}_D{D}_If")
+        cqw = self._rand_cond_qubit()
+        return WhileLoop(cqw, inner_if, name=f"{tag}_D{D}_While")
+   
+    # --- helper: nested If tree of height H; leaves are E(depth) ------------
+    def _if_tree_with_equal_cores(self, depth_equal: int, H: int, tag: str) -> Node:
+        """
+        Build a nested IfElse tree of height H.
+        - H == 1:
+            if { E(depth_equal) } else { E(depth_equal) }
+        - H > 1:
+            if { (H-1)-tree } else { (H-1)-tree }
+        Each leaf is a *fresh* E(depth_equal) to avoid state sharing.
+        """
+        if H <= 0:
+            # leaf: equal-depth core
+            return self._equal_template_depth(depth_equal, f"{tag}_Leaf")
+
+        # internal node
+        cq = self._rand_cond_qubit()
+        left  = self._if_tree_with_equal_cores(depth_equal, H - 1, f"{tag}_L{H}")
+        right = self._if_tree_with_equal_cores(depth_equal, H - 1, f"{tag}_R{H}")
+        return IfElse(cq, left, right,
+                    conflict_level=self.P.conflict_level,
+                    name=f"{tag}_If_H{H}")
+
+
+    def build_wi_rule(self, w: Optional[int], i: Optional[int], tag: str = "WiRule") -> Node:
+        """
+        If any of w/i is None, default depth=1 and no shells.
+        Otherwise:
+          core = E(min(w,i))
+          if w>i: wrap (w-i) times: core = while{ core }
+          if i>w: wrap (i-w) times: core = if{ if{leaf}else{leaf} } else { if{leaf}else{leaf} } (around core)
+        """
+        if w is None or i is None:
+            return self._equal_template_depth(1, f"{tag}_Default")
+
+        depth = max(1, min(int(w), int(i)))
+        print(f"Building W/I rule with depth={depth}, W={w}, I={i}")
+        core = self._equal_template_depth(depth, f"{tag}_E{depth}")
+        if w == i:
+            return core
+        
+        if w > i:
+            diff = w - i
+            for k in range(diff):
+                core = WhileLoop(self._rand_cond_qubit(), core,
+                                 name=f"{tag}_WrapW_{k+1}of{diff}")
+            return core
+
+        # i > w: build nested IfElse tree of height (i-w), leaves = E(depth)
+        diff = i - w
+        return self._if_tree_with_equal_cores(depth, diff, f"{tag}_WrapI")
 
     def _build_nested_loop_stack(self, level: int, tag: str, loops_to_make: int) -> Node:
         """
@@ -830,10 +926,48 @@ class ProgramBuilder:
                 kids.append(post_loop)
         return Seq(*kids)
 
-# ---------------------------------------------------------------------------
-# Emission helpers
-# ---------------------------------------------------------------------------
+    def build_if_else_inside_for(self, tag: str, nb_segments: int) -> Node:
+        """
+        Build a FOR loop containing an IF/ELSE.
+        """
+        circuit_segments: List[Node] = []
+        ### seq for{seq;if-else;seq} seq repeat 3 times
+        for i in range(nb_segments):
+            circuit_segments.append(self._make_seq_block(1, f"{tag}_Seg{i}_Pre"))
+            cq = self._rand_cond_qubit()
+            pre_if = self._make_seq_block(2, f"{tag}_Seg{i}_If_Pre")
+            then_blk = self._make_seq_block(2, f"{tag}_Seg{i}_Then",depth_factor=.5)
+            else_blk = self._make_seq_block(2, f"{tag}_Seg{i}_Else",depth_factor=.5)
+            ifelse = IfElse(cq, then_blk, else_blk, conflict_level=self.P.conflict_level,
+                            name=f"{tag}_Seg{i}_IfElse")
+            post_if = self._make_seq_block(2, f"{tag}_Seg{i}_If_Post")
 
+            full_inner = Seq(pre_if, ifelse, post_if)
+            
+            K = choose_from_range_rng(
+                self.rng_shape, *self.P.for_iters_rng, True)
+            for_loop = ForLoop(K, full_inner, name=f"{tag}_Seg{i}_ForLoop")
+            circuit_segments.append(for_loop)
+            circuit_segments.append(self._make_seq_block(1, f"{tag}_Seg{i}_Post"))
+        
+        body = Seq(*circuit_segments)
+        return body
+
+    def build_single_loop_based(self, tag: str) -> Node:
+        """
+        Build a single FOR loop around a SEQ of leaves.
+        """
+
+        loop_body = self._make_seq_block(1, f"{tag}_LoopBody")
+        pre_loop_code = self._make_seq_block(1, f"{tag}_PreLoop")
+        post_loop_code = self._make_seq_block(1, f"{tag}_PostLoop")
+
+        K = choose_from_range_rng(
+            self.rng_shape, *self.P.for_iters_rng, True)
+        for_loop = ForLoop(K, loop_body, name=f"{tag}_ForLoop")
+
+        full_circuit = Seq(pre_loop_code, for_loop, post_loop_code)
+        return full_circuit
 
 def emit_program(root: Node, n_qubits: int, ctx: EmitContext, gates_rng: random.Random) -> str:
     """
@@ -936,6 +1070,16 @@ def build_argparser() -> argparse.ArgumentParser:
     p.add_argument("--conflict-level", type=int, default=2,
                    help="Min graph distance between sibling branch patches")
 
+    p.add_argument("--template", type=str, default="loop_only",
+                   help="Template type to use (loop_only, if_else_inside_for, wi_rule, etc.)")
+    p.add_argument("--w", type=int, default=None,
+                   help="Number of while 'weight' for wi_rule template")
+    p.add_argument("--i", type=int, default=None,
+                   help="Number of if 'weight' for wi_rule template")
+
+    # save dir
+    p.add_argument("--output-dir", type=str, default="default",
+                   help="Output directory for generated benchmarks")
     return p
 
 # ---------------------------------------------------------------------------
@@ -957,7 +1101,7 @@ def main():
     gates_1q = [g.strip() for g in args.gates_1q.split(",") if g.strip()]
     gates_2q = [g.strip() for g in args.gates_2q.split(",") if g.strip()]
 
-    bench_dir = f"benchmarks/{args.n_qubits}qbt"
+    bench_dir = f"benchmarks/{args.output_dir}/{args.n_qubits}qbt"
     # Prepare output
     ensure_dir(bench_dir)
 
@@ -1002,7 +1146,19 @@ def main():
     )
 
     builder = ProgramBuilder(P)
-    root = builder.build_top()
+    root = None
+    if args.template == "if_else_inside_for":
+        root = builder.build_if_else_inside_for(tag="TopLevel", nb_segments=5)
+    elif args.template == "one_loop":
+        root = builder.build_single_loop_based(tag="TopLevel")
+    elif args.template == "one-if_inside_loop":
+        root = builder.build_if_else_inside_for(tag="TopLevel", nb_segments=1)
+    elif args.template == "wi_rule":
+        # Use --w / --i; if omitted we still emit the equal-template core.
+        print("Building wi_rule template with w =", args.w, ", i =", args.i)
+        root = builder.build_wi_rule(w=args.w, i=args.i, tag="TopLevel")
+    else:
+        root = builder.build_top()
 
     # Metadata: skeleton-only counts and bit count (fixed across replicates)
     skeleton_counts = count_nodes(root)

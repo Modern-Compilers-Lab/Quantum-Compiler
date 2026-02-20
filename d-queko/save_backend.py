@@ -2,7 +2,7 @@ import networkx as nx
 import random
 
 
-DENSITY = .3
+DENSITY = .1
 SEED = 42
 
 
@@ -25,7 +25,7 @@ def generate_dense_backend(n: int, density: float = 0.8, seed: int = 42) -> nx.G
 # backend_54 = generate_dense_backend(54, DENSITY, SEED)
 # backend_81 = generate_dense_backend(81, DENSITY, SEED)
 # backend_127 = generate_dense_backend(127, DENSITY, SEED)
-backend_121 = generate_dense_backend(121, DENSITY, SEED)
+backend_121 = generate_dense_backend(54, DENSITY, SEED)
 
 # Save backends to files
 # nx.write_gml(
