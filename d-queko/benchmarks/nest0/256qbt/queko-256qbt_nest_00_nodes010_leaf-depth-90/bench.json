@@ -1,0 +1,69 @@
+{
+  "n_qubits": 256,
+  "top_len": 10,
+  "nest_depth": 0,
+  "child_len_rng": [
+    2,
+    2
+  ],
+  "for_iters_rng": [
+    4,
+    4
+  ],
+  "mix": {
+    "leaf": 0.2,
+    "for": 0.4,
+    "while": 0.4,
+    "if": 0.0
+  },
+  "leaf_args": {
+    "depth": 90,
+    "density": {
+      "alpha_1q": 0.3,
+      "beta_2q": 0.7
+    },
+    "gates_1q": [
+      "x",
+      "h",
+      "z",
+      "rx",
+      "rz"
+    ],
+    "gates_2q": [
+      "cx",
+      "cz"
+    ]
+  },
+  "skeleton_counts": {
+    "leaf": 19,
+    "if": 0,
+    "for": 6,
+    "while": 3
+  },
+  "bit_count": 3,
+  "replicates": 10,
+  "circuits": [
+    "circ_00.qasm",
+    "circ_01.qasm",
+    "circ_02.qasm",
+    "circ_03.qasm",
+    "circ_04.qasm",
+    "circ_05.qasm",
+    "circ_06.qasm",
+    "circ_07.qasm",
+    "circ_08.qasm",
+    "circ_09.qasm"
+  ],
+  "args": {
+    "seed": 1,
+    "device": "../qpu/dqueko/backend_256_qubits_seed_42_density_0.3.gml",
+    "n_qubits": 256,
+    "conflict_level": 2
+  },
+  "sample_counts_rep0": {
+    "n_bits": 3,
+    "total_1q": 253080,
+    "total_2q": 299700,
+    "n_leaves": 19
+  }
+}

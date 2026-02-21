@@ -1,0 +1,16 @@
+{
+  "code_distance": 9,
+  "rounds": 20,
+  "n_data_qubits": 81,
+  "n_ancilla_qubits": 80,
+  "total_qubits": 161,
+  "x_stabilizers": 40,
+  "z_stabilizers": 40,
+  "cnots_per_round": 288,
+  "h_gates_per_round": 80,
+  "total_cnots_unrolled": 5760,
+  "corrections_per_round": 80,
+  "with_corrections": true,
+  "replicates": 3,
+  "base_seed": 42
+}
