@@ -1,0 +1,17 @@
+{
+  "code_distance": 7,
+  "rounds": 15,
+  "n_data_qubits": 49,
+  "n_ancilla_qubits": 48,
+  "total_qubits": 97,
+  "x_stabilizers": 24,
+  "z_stabilizers": 24,
+  "cnots_per_round": 168,
+  "h_gates_per_round": 48,
+  "total_cnots_unrolled": 2520,
+  "corrections_per_round": 48,
+  "with_corrections": true,
+  "replicates": 3,
+  "base_seed": 42,
+  "generator": "stim 1.15.0 (surface_code:rotated_memory_z)"
+}

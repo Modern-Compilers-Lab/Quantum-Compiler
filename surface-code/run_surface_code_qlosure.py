@@ -65,7 +65,15 @@ def main():
     parser.add_argument("--rounds", type=int, nargs="+", default=None,
                         help="Rounds to run (default: auto-detect)")
     parser.add_argument("--verbose", type=int, default=0, help="Verbosity level")
+    parser.add_argument("--benchmarks-dir", type=str, default=None,
+                        help="Benchmarks directory (default: benchmarks/)")
+    parser.add_argument("--results-tag", type=str, default="surface_code",
+                        help="Results sub-folder tag (default: surface_code)")
     args = parser.parse_args()
+
+    if args.benchmarks_dir:
+        global BENCHMARKS_DIR
+        BENCHMARKS_DIR = os.path.abspath(args.benchmarks_dir)
 
     # Load backend
     print(f"Loading backend: {args.backend}")
@@ -81,7 +89,7 @@ def main():
         print(f"✘ No benchmarks found at {BENCHMARKS_DIR}. Run generate_surface_code.py first.")
         sys.exit(1)
 
-    results_base = RESULTS_ROOT / "qlosure" / "surface_code" / args.backend
+    results_base = RESULTS_ROOT / "qlosure" / args.results_tag / args.backend
 
     total_ok, total_fail = 0, 0
 
@@ -128,6 +136,9 @@ def main():
 
                 for seed in tqdm(SEEDS, desc=f"  {circ_file}", leave=False):
                     out_dir = results_base / f"d{d}" / bench_dir_name / circ_name / f"SEED_{seed}"
+                    if (out_dir / "trace.json").exists():
+                        total_ok += 1
+                        continue
                     ok, elapsed = run_circuit(circ_path, out_dir, backend, seed=seed, verbose=args.verbose)
                     if ok:
                         total_ok += 1

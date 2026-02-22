@@ -2,29 +2,27 @@
 Surface Code Benchmark Generator for Quantum Routing Evaluation
 ================================================================
 
-Generates OpenQASM 3 circuits implementing rotated Surface Code
-quantum memory (repeated syndrome extraction with no logical ops).
+Uses **Stim** (https://github.com/quantumlib/Stim) to produce
+the canonical rotated-surface-code memory-Z experiment, then
+converts the resulting circuit to OpenQASM 3 for Qiskit-based
+mapping / routing tools.
 
-This addresses the QEC evaluation gap: circuits have:
-  - FOR loops (repeated syndrome extraction rounds)
-  - Mid-circuit measurements + conditional corrections (IF blocks)
-  - Heavy 2-qubit gate (CNOT) workloads on a local 2D patch
-  - Scalable qubit counts via code distance parameter
+Why Stim?
+  Stim's `Circuit.generated("surface_code:rotated_memory_z", ...)`
+  is a widely-used, well-tested reference implementation.  Using it
+  guarantees correct:
+    - stabilizer decomposition (X vs Z plaquettes, boundaries)
+    - 4-step CX schedule (minimises hook-error weight)
+    - qubit coordinate assignment
 
-Rotated Surface Code layout (distance d):
-  - d² data qubits
-  - (d²-1) / 2  X-stabilizers  (on "faces")
-  - (d²-1) / 2  Z-stabilizers  (on "vertices")
-  - Total ancilla = d² - 1
-  - Total qubits  = 2d² - 1
+What this script adds on top of Stim:
+  - Sparse -> contiguous qubit index remapping
+  - OpenQASM 3 emission with FOR loops and IF-based corrections
+  - Replicate generation with distinct random seeds
 
-Qubit counts by distance:
-  d=3  →   17 qubits
-  d=5  →   49 qubits
-  d=7  →   97 qubits
-  d=9  →  161 qubits
-  d=11 →  241 qubits
-  d=13 →  337 qubits
+Rotated Surface Code qubit counts (2d^2 - 1):
+  d=3  ->   17 qubits        d=7  ->   97 qubits
+  d=5  ->   49 qubits        d=9  ->  161 qubits
 
 Usage:
     python generate_surface_code.py                      # all defaults
@@ -40,208 +38,270 @@ import argparse
 import json
 import os
 import random
-import math
-from typing import List, Tuple, Dict, Set
+from typing import Dict, List, Tuple, Set
+
+import stim
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 BENCHMARKS_DIR = os.path.join(SCRIPT_DIR, "benchmarks")
 
 
-# ─── Rotated Surface Code geometry ──────────────────────────────────────────
+# --- Stim -> internal representation ----------------------------------------
 
-def build_rotated_surface_code(d: int):
+def _extract_surface_code_schedule(d: int, rounds: int = 2):
     """
-    Build the rotated surface code layout for distance d.
+    Use Stim to generate a rotated surface-code memory-Z experiment
+    and extract the gate schedule, qubit roles, and CX pairs.
 
-    Returns:
-        data_qubits:   list of (row, col) for data qubits
-        x_stabilizers: list of (ancilla_idx, [data neighbors])
-        z_stabilizers: list of (ancilla_idx, [data neighbors])
-        n_data:        number of data qubits
-        n_ancilla:     number of ancilla qubits
+    Returns
+    -------
+    data_qubits   : sorted list of (remapped) data qubit indices
+    ancilla_qubits: sorted list of (remapped) ancilla qubit indices
+    h_qubits      : list of (remapped) ancilla indices that get H gates
+                    (these are the X-stabilizer ancillas)
+    cx_steps      : list of 4 lists, each a list of (ctrl, tgt) pairs
+    total_qubits  : int  (== 2d^2 - 1)
+    remap         : dict  sparse_stim_idx -> contiguous_idx
     """
-    # Data qubits on a d×d grid
-    data_coords = []
-    coord_to_idx = {}
-    for r in range(d):
-        for c in range(d):
-            idx = r * d + c
-            data_coords.append((r, c))
-            coord_to_idx[(r, c)] = idx
+    circuit = stim.Circuit.generated(
+        "surface_code:rotated_memory_z",
+        rounds=max(rounds, 3),   # need >= 3 so Stim emits a REPEAT block
+        distance=d,
+        after_clifford_depolarization=0,
+        after_reset_flip_probability=0,
+        before_measure_flip_probability=0,
+        before_round_data_depolarization=0,
+    )
 
-    n_data = d * d
+    # -- identify data / ancilla qubits from flattened circuit --
+    flat = circuit.flattened()
+    data_set: Set[int] = set()
+    ancilla_set: Set[int] = set()
+    for inst in flat:
+        if inst.name == "M":          # final data-qubit measurement
+            for t in inst.targets_copy():
+                data_set.add(t.value)
+        elif inst.name == "MR":       # mid-circuit ancilla measure+reset
+            for t in inst.targets_copy():
+                ancilla_set.add(t.value)
 
-    # Stabilizers for rotated surface code
-    # X-stabilizers are on "even" plaquettes, Z-stabilizers on "odd" plaquettes
+    # Build sparse -> contiguous remap (data first, then ancilla)
+    data_sorted = sorted(data_set)
+    ancilla_sorted = sorted(ancilla_set)
+    remap: Dict[int, int] = {}
+    for new_idx, old_idx in enumerate(data_sorted):
+        remap[old_idx] = new_idx
+    offset = len(data_sorted)
+    for new_idx, old_idx in enumerate(ancilla_sorted):
+        remap[old_idx] = offset + new_idx
+
+    total_qubits = len(data_set) + len(ancilla_set)
+    assert total_qubits == 2 * d * d - 1, (
+        f"Expected {2*d*d-1} qubits for d={d}, got {total_qubits}"
+    )
+
+    # -- extract one syndrome-extraction round from the REPEAT body --
+    body = None
+    for inst in circuit:
+        if isinstance(inst, stim.CircuitRepeatBlock):
+            body = inst.body_copy()
+            break
+    assert body is not None, "No REPEAT block found in Stim circuit"
+
+    h_qubits: List[int] = []
+    cx_steps: List[List[Tuple[int, int]]] = []
+    seen_h = False
+
+    for op in body:
+        if op.name == "H" and not seen_h:
+            # First H layer -> X-stabilizer ancillas
+            h_qubits = [remap[t.value] for t in op.targets_copy()]
+            seen_h = True
+        elif op.name == "CX":
+            targets = [t.value for t in op.targets_copy()]
+            pairs = [(remap[targets[i]], remap[targets[i + 1]])
+                     for i in range(0, len(targets), 2)]
+            cx_steps.append(pairs)
+
+    assert len(cx_steps) == 4, f"Expected 4 CX steps, got {len(cx_steps)}"
+
+    data_qubits = [remap[q] for q in data_sorted]
+    ancilla_qubits = [remap[q] for q in ancilla_sorted]
+
+    return data_qubits, ancilla_qubits, h_qubits, cx_steps, total_qubits, remap
+
+
+# --- Identify X / Z stabilizer ancillas and their data neighbors ------------
+
+def _build_stabilizer_info(
+    ancilla_qubits: List[int],
+    h_qubits: List[int],
+    cx_steps: List[List[Tuple[int, int]]],
+    data_set: Set[int],
+):
+    """
+    From the CX schedule, figure out which ancillas are X-type (they
+    get H gates) vs Z-type, and which data qubits each ancilla touches.
+
+    Returns
+    -------
+    x_stabilizers : list of (ancilla_idx, [data_neighbors])
+    z_stabilizers : list of (ancilla_idx, [data_neighbors])
+    """
+    h_set = set(h_qubits)
+
+    # Collect all data neighbors of each ancilla
+    anc_neighbors: Dict[int, List[int]] = {a: [] for a in ancilla_qubits}
+    for step in cx_steps:
+        for ctrl, tgt in step:
+            if ctrl in anc_neighbors and tgt in data_set:
+                anc_neighbors[ctrl].append(tgt)
+            elif tgt in anc_neighbors and ctrl in data_set:
+                anc_neighbors[tgt].append(ctrl)
+
     x_stabilizers = []
     z_stabilizers = []
-    ancilla_idx = n_data  # ancilla IDs start after data qubits
+    for a in ancilla_qubits:
+        neighbors = list(dict.fromkeys(anc_neighbors[a]))  # deduplicate, keep order
+        if a in h_set:
+            x_stabilizers.append((a, neighbors))
+        else:
+            z_stabilizers.append((a, neighbors))
 
-    for r in range(d - 1):
-        for c in range(d - 1):
-            # Each plaquette touches 4 data qubits:
-            # (r,c), (r,c+1), (r+1,c), (r+1,c+1)
-            neighbors = [
-                coord_to_idx[(r, c)],
-                coord_to_idx[(r, c + 1)],
-                coord_to_idx[(r + 1, c)],
-                coord_to_idx[(r + 1, c + 1)],
-            ]
-            if (r + c) % 2 == 0:
-                x_stabilizers.append((ancilla_idx, neighbors))
-            else:
-                z_stabilizers.append((ancilla_idx, neighbors))
-            ancilla_idx += 1
+    return x_stabilizers, z_stabilizers
 
-    # Boundary stabilizers (weight-2)
-    # Top boundary
-    for c in range(0, d - 1, 2):
-        neighbors = [coord_to_idx[(0, c)], coord_to_idx[(0, c + 1)]]
-        z_stabilizers.append((ancilla_idx, neighbors))
-        ancilla_idx += 1
 
-    # Bottom boundary
-    for c in range((d - 1) % 2, d - 1, 2):
-        neighbors = [coord_to_idx[(d - 1, c)], coord_to_idx[(d - 1, c + 1)]]
-        z_stabilizers.append((ancilla_idx, neighbors))
-        ancilla_idx += 1
-
-    # Left boundary
-    for r in range(0, d - 1, 2):
-        neighbors = [coord_to_idx[(r, 0)], coord_to_idx[(r + 1, 0)]]
-        x_stabilizers.append((ancilla_idx, neighbors))
-        ancilla_idx += 1
-
-    # Right boundary
-    for r in range((d - 1) % 2, d - 1, 2):
-        neighbors = [coord_to_idx[(r, d - 1)], coord_to_idx[(r + 1, d - 1)]]
-        x_stabilizers.append((ancilla_idx, neighbors))
-        ancilla_idx += 1
-
-    n_ancilla = ancilla_idx - n_data
-
-    return data_coords, x_stabilizers, z_stabilizers, n_data, n_ancilla
-
+# --- QASM 3 emitter ---------------------------------------------------------
 
 def emit_surface_code_qasm(
     d: int,
     rounds: int,
-    n_data: int,
-    n_ancilla: int,
-    x_stabilizers: List[Tuple[int, List[int]]],
-    z_stabilizers: List[Tuple[int, List[int]]],
     seed: int = 42,
     with_corrections: bool = True,
 ) -> str:
     """
-    Generate an OpenQASM 3 circuit for Surface Code quantum memory.
+    Generate an OpenQASM 3 circuit for rotated Surface Code memory.
 
-    The circuit structure:
+    The circuit structure mirrors Stim's canonical CX schedule:
+
+        // initialise a random subset with H
         for round in [0:rounds] {
-            // Reset ancillas
-            // Z-stabilizer extraction (CNOT: data→ancilla)
-            // X-stabilizer extraction (H, CNOT: ancilla→data, H)
-            // Measure ancillas
-            // Conditional corrections (if measurement != 0)
+            reset ancillas
+            H on X-ancillas
+            CX step 1 ... 4     (Stim's hook-optimal ordering)
+            H on X-ancillas
+            measure ancillas -> c[]
+            if (c[k]) { X or Z correction on a data qubit }
         }
+        measure data qubits
     """
-    total_qubits = n_data + n_ancilla
-    n_cbits = n_ancilla  # one classical bit per ancilla measurement
+    (data_qubits, ancilla_qubits, h_qubits,
+     cx_steps, total_qubits, _remap) = _extract_surface_code_schedule(d, rounds)
 
-    lines = []
+    data_set = set(data_qubits)
+    x_stabilizers, z_stabilizers = _build_stabilizer_info(
+        ancilla_qubits, h_qubits, cx_steps, data_set,
+    )
+
+    n_data = len(data_qubits)
+    n_ancilla = len(ancilla_qubits)
+    n_cbits = n_ancilla
+
+    lines: List[str] = []
     lines.append("OPENQASM 3;")
     lines.append('include "stdgates.inc";')
     lines.append(f"qubit[{total_qubits}] q;")
     lines.append(f"bit[{n_cbits}] c;")
     lines.append("")
-    lines.append(f"// Surface Code d={d}, {rounds} syndrome extraction rounds")
-    lines.append(f"// {n_data} data qubits + {n_ancilla} ancilla qubits = {total_qubits} total")
+    lines.append(f"// Rotated Surface Code d={d}, {rounds} syndrome-extraction rounds")
+    lines.append(f"// Generated from Stim {stim.__version__} (surface_code:rotated_memory_z)")
+    lines.append(f"// {n_data} data + {n_ancilla} ancilla = {total_qubits} qubits")
     lines.append(f"// X-stabilizers: {len(x_stabilizers)}, Z-stabilizers: {len(z_stabilizers)}")
+    lines.append(f"// CX schedule: 4 steps, {sum(len(s) for s in cx_steps)} total CX per round")
     lines.append("")
 
-    # Initialize data qubits in |+⟩ state (optional, for a mixed-basis memory)
+    # Random initialisation of a subset of data qubits in |+> state
     rng = random.Random(seed)
-    init_qubits = rng.sample(range(n_data), n_data // 3)
-    for qi in sorted(init_qubits):
+    init_qubits = sorted(rng.sample(data_qubits, n_data // 3))
+    for qi in init_qubits:
         lines.append(f"h q[{qi}];")
     lines.append("")
 
-    # Main syndrome extraction loop
+    # -- Syndrome extraction loop --
     lines.append(f"for int round in [0:{rounds}] {{")
 
-    # ─── Reset ancilla qubits ───
+    # Reset ancilla qubits
     lines.append("  // Reset ancilla qubits")
-    for anc_idx, _ in z_stabilizers + x_stabilizers:
-        local_idx = anc_idx
-        lines.append(f"  reset q[{local_idx}];")
+    for a in ancilla_qubits:
+        lines.append(f"  reset q[{a}];")
     lines.append("")
 
-    # ─── Z-stabilizer syndrome extraction ───
-    lines.append("  // Z-stabilizer syndrome extraction")
-    cbit_counter = 0
-    z_cbit_start = cbit_counter
-    for anc_idx, data_neighbors in z_stabilizers:
-        for data_q in data_neighbors:
-            lines.append(f"  cx q[{data_q}], q[{anc_idx}];")
-        cbit_counter += 1
+    # H on X-stabilizer ancillas (basis change for X-type measurement)
+    lines.append("  // Hadamard on X-stabilizer ancillas")
+    for a in h_qubits:
+        lines.append(f"  h q[{a}];")
     lines.append("")
 
-    # ─── X-stabilizer syndrome extraction ───
-    lines.append("  // X-stabilizer syndrome extraction")
-    x_cbit_start = cbit_counter
-    for anc_idx, data_neighbors in x_stabilizers:
-        lines.append(f"  h q[{anc_idx}];")
-        for data_q in data_neighbors:
-            lines.append(f"  cx q[{anc_idx}], q[{data_q}];")
-        lines.append(f"  h q[{anc_idx}];")
-        cbit_counter += 1
+    # 4-step CX schedule (Stim's hook-optimal ordering)
+    for step_idx, pairs in enumerate(cx_steps):
+        lines.append(f"  // CX step {step_idx + 1}")
+        for ctrl, tgt in pairs:
+            lines.append(f"  cx q[{ctrl}], q[{tgt}];")
+        lines.append("")
+
+    # H on X-stabilizer ancillas (undo basis change)
+    lines.append("  // Undo Hadamard on X-stabilizer ancillas")
+    for a in h_qubits:
+        lines.append(f"  h q[{a}];")
     lines.append("")
 
-    # ─── Measure all ancilla qubits ───
+    # Measure ancillas
     lines.append("  // Measure syndrome ancillas")
     meas_idx = 0
+    z_meas_indices = {}
     for anc_idx, _ in z_stabilizers:
         lines.append(f"  c[{meas_idx}] = measure q[{anc_idx}];")
+        z_meas_indices[anc_idx] = meas_idx
         meas_idx += 1
+    x_meas_indices = {}
     for anc_idx, _ in x_stabilizers:
         lines.append(f"  c[{meas_idx}] = measure q[{anc_idx}];")
+        x_meas_indices[anc_idx] = meas_idx
         meas_idx += 1
     lines.append("")
 
-    # ─── Conditional corrections based on syndrome ───
+    # Conditional corrections
     if with_corrections:
         lines.append("  // Conditional corrections")
-        # Z-syndrome → X corrections on data
-        meas_idx = 0
+        # Z-syndrome -> X correction on first data neighbor
         for anc_idx, data_neighbors in z_stabilizers:
             if data_neighbors:
-                correction_target = data_neighbors[0]
-                lines.append(f"  if (c[{meas_idx}]) {{")
-                lines.append(f"    x q[{correction_target}];")
+                mi = z_meas_indices[anc_idx]
+                lines.append(f"  if (c[{mi}]) {{")
+                lines.append(f"    x q[{data_neighbors[0]}];")
                 lines.append(f"  }}")
-            meas_idx += 1
-
-        # X-syndrome → Z corrections on data
+        # X-syndrome -> Z correction on first data neighbor
         for anc_idx, data_neighbors in x_stabilizers:
             if data_neighbors:
-                correction_target = data_neighbors[0]
-                lines.append(f"  if (c[{meas_idx}]) {{")
-                lines.append(f"    z q[{correction_target}];")
+                mi = x_meas_indices[anc_idx]
+                lines.append(f"  if (c[{mi}]) {{")
+                lines.append(f"    z q[{data_neighbors[0]}];")
                 lines.append(f"  }}")
-            meas_idx += 1
         lines.append("")
 
     lines.append("}")  # end for loop
     lines.append("")
 
-    # Final data qubit measurement
+    # Final data qubit readout
     lines.append("// Final data qubit readout")
-    for i in range(n_data):
+    for i, dq in enumerate(data_qubits):
         if i < n_cbits:
-            lines.append(f"c[{i}] = measure q[{i}];")
+            lines.append(f"c[{i}] = measure q[{dq}];")
 
     return "\n".join(lines)
 
+
+# --- batch generation -------------------------------------------------------
 
 def generate_benchmarks(
     distances: List[int],
@@ -256,14 +316,17 @@ def generate_benchmarks(
     summary = []
 
     for d in distances:
-        data_coords, x_stab, z_stab, n_data, n_ancilla = build_rotated_surface_code(d)
-        total_q = n_data + n_ancilla
-        n_stab = len(x_stab) + len(z_stab)
+        # Compute structural info once per distance
+        (data_q, anc_q, h_q, cx_steps,
+         total_q, _) = _extract_surface_code_schedule(d)
+        data_set = set(data_q)
+        x_stab, z_stab = _build_stabilizer_info(anc_q, h_q, cx_steps, data_set)
 
-        # CNOT count per round: sum of all stabilizer weights
-        cnots_per_round = sum(len(nb) for _, nb in z_stab) + sum(len(nb) for _, nb in x_stab)
-        # H gates per round: 2 * number of X-stabilizers
-        h_per_round = 2 * len(x_stab)
+        n_data = len(data_q)
+        n_ancilla = len(anc_q)
+        n_stab = len(x_stab) + len(z_stab)
+        cnots_per_round = sum(len(step) for step in cx_steps)
+        h_per_round = 2 * len(h_q)
 
         for rounds in rounds_list:
             bench_name = f"surface_code_d{d}_r{rounds}"
@@ -274,7 +337,7 @@ def generate_benchmarks(
             total_h = h_per_round * rounds
             total_corrections = n_stab * rounds
 
-            print(f"  d={d:2d}, rounds={rounds:3d} → {total_q:4d} qubits, "
+            print(f"  d={d:2d}, rounds={rounds:3d} -> {total_q:4d} qubits, "
                   f"~{total_cnots:6d} CNOTs, ~{total_h} H gates, "
                   f"~{total_corrections} corrections/round")
 
@@ -283,10 +346,6 @@ def generate_benchmarks(
                 qasm = emit_surface_code_qasm(
                     d=d,
                     rounds=rounds,
-                    n_data=n_data,
-                    n_ancilla=n_ancilla,
-                    x_stabilizers=x_stab,
-                    z_stabilizers=z_stab,
                     seed=seed,
                     with_corrections=with_corrections,
                 )
@@ -310,6 +369,7 @@ def generate_benchmarks(
                 "with_corrections": with_corrections,
                 "replicates": replicates,
                 "base_seed": base_seed,
+                "generator": f"stim {stim.__version__} (surface_code:rotated_memory_z)",
             }
             with open(os.path.join(bench_dir, "bench.json"), "w") as f:
                 json.dump(meta, f, indent=2)
@@ -332,7 +392,8 @@ def generate_benchmarks(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Generate Surface Code quantum memory benchmarks (OpenQASM 3)")
+        description="Generate Surface Code quantum memory benchmarks (OpenQASM 3) "
+                    "using Stim's rotated_memory_z generator")
     parser.add_argument("--distances", type=int, nargs="+", default=[3, 5, 7, 9],
                         help="Code distances to generate (default: 3 5 7 9)")
     parser.add_argument("--rounds", type=int, nargs="+", default=[3, 5, 10, 15, 20],
@@ -343,13 +404,20 @@ def main():
                         help="Base random seed (default: 42)")
     parser.add_argument("--no-corrections", action="store_true",
                         help="Omit conditional corrections (no IF blocks)")
+    parser.add_argument("--output-dir", type=str, default=None,
+                        help="Output directory for benchmarks (default: benchmarks/)")
     args = parser.parse_args()
 
-    print(f"Generating Surface Code benchmarks...")
-    print(f"  Distances: {args.distances}")
-    print(f"  Rounds:    {args.rounds}")
-    print(f"  Replicates: {args.replicates}")
+    if args.output_dir:
+        global BENCHMARKS_DIR
+        BENCHMARKS_DIR = os.path.abspath(args.output_dir)
+
+    print(f"Generating Surface Code benchmarks (Stim {stim.__version__})...")
+    print(f"  Distances:   {args.distances}")
+    print(f"  Rounds:      {args.rounds}")
+    print(f"  Replicates:  {args.replicates}")
     print(f"  Corrections: {not args.no_corrections}")
+    print(f"  Output dir:  {BENCHMARKS_DIR}")
     print()
 
     generate_benchmarks(

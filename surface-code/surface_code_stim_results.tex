@@ -1,0 +1,121 @@
+% -----------------------------------------------------------------
+%  Surface Code (Stim) – Summary Results
+%  Backend: IBM Brisbane (127 qubits)
+% -----------------------------------------------------------------
+
+We evaluate \textsc{Qlosure} on rotated surface-code circuits generated with
+\textsc{Stim}~v1.15.0~\cite{gidney2021stim}.
+Each circuit implements a memory-$Z$ experiment using $2d^{2}-1$ qubits
+($d^{2}$~data + $d^{2}-1$~ancilla) with a four-step \textsc{cx} schedule
+wrapped in an OpenQASM~3 \texttt{for} loop.
+We sweep code distances $d\in\{3,5,7\}$ and round counts
+$r\in\{3,5,10,15,20\}$ with three replicates each, yielding 45~circuits
+routed on IBM Brisbane (127~qubits, heavy-hex) with three seeds per circuit
+(135~runs per method).
+Table~\ref{tab:stim-summary} reports the per-distance averages (over all
+rounds and seeds).
+\textsc{Qlosure} consistently outperforms \textsc{Sabre}: at $d{=}7$ it
+reduces \textsc{swap} count by 38\,\%, depth by 59\,\%, latency by 60\,\%,
+and error by 35\,\%; at $d{=}3$ all metrics improve by 30--38\,\%; at
+$d{=}5$ depth and latency still drop by ${\sim}29$\,\% despite a smaller
+12\,\% \textsc{swap} reduction.
+Results are stable across round counts, confirming that routing quality
+depends on the loop body structure rather than the iteration count.
+
+\begin{table}[t]
+  \centering
+  \caption{Qlosure vs.\ SABRE on Stim rotated surface-code benchmarks
+           (IBM Brisbane, 127\,qbt). Improvement $\Delta$\% =
+           $(\text{SABRE}-\text{Ours})/\text{SABRE}\times 100$.}
+  \label{tab:stim-summary}
+  \begin{tabular}{c c c  rr r  rr r  rr r  rr r}
+    \toprule
+    & & &
+    \multicolumn{3}{c}{\textbf{SWAPs}} &
+    \multicolumn{3}{c}{\textbf{Depth}} &
+    \multicolumn{3}{c}{\textbf{Latency}} &
+    \multicolumn{3}{c}{\textbf{Error}} \\
+    \cmidrule(lr){4-6} \cmidrule(lr){7-9} \cmidrule(lr){10-12} \cmidrule(lr){13-15}
+    $d$ & Qubits & CX/rnd &
+    Ours & SABRE & $\Delta$\% &
+    Ours & SABRE & $\Delta$\% &
+    Ours & SABRE & $\Delta$\% &
+    Ours & SABRE & $\Delta$\% \\
+    \midrule
+    3 &  17 &  24 & \textbf{848}   & 1\,360  & +37.6 & \textbf{395}  & 562   & +29.8 & \textbf{229}  & 355   & +35.5 & \textbf{1.92} & 2.84 & +32.4 \\
+    5 &  49 & 120 & \textbf{4\,320} & 4\,887  & +11.6 & \textbf{806}  & 1\,132 & +28.8 & \textbf{494}  & 711   & +30.5 & \textbf{3.80} & 4.47 & +15.1 \\
+    7 &  97 & 168 & \textbf{8\,271} & 13\,387 & +38.2 & \textbf{909}  & 2\,192 & +58.5 & \textbf{564}  & 1\,415 & +60.1 & \textbf{5.05} & 7.71 & +34.6 \\
+    \midrule
+    \multicolumn{3}{c}{\textbf{Overall}} &
+    \textbf{4\,480} & 6\,544 & \textbf{+31.5} &
+    \textbf{703}  & 1\,295 & \textbf{+45.7} &
+    \textbf{429}  &  827   & \textbf{+48.1} &
+    \textbf{3.59} & 5.01   & \textbf{+28.4} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+% -----------------------------------------------------------------
+%  Chiplet QPU Results
+% -----------------------------------------------------------------
+
+Table~\ref{tab:chiplet-results} evaluates \textsc{DinamiQ} on two
+chiplet-based QPU architectures using dynamically generated \textit{d-QUEKO}
+circuits, including a new 256-qubit benchmark designed to stress inter-chip
+communication.
+The Heavy-Hexagon $8{\times}8$\_$2{\times}2$ topology consists of four
+$8{\times}8$ chips arranged in a $2{\times}2$ inter-chip connection grid
+(81 and 121~logical qubits); the IBM Flamingo topology models three
+156-qubit Kingston chips with a $7.4{\times}$ latency and error penalty for
+inter-chip links relative to intra-chip operations.
+On the Heavy-Hexagon chiplet, \textsc{DinamiQ} strikes an effective balance
+across all four metrics, reducing \textsc{swap} count by 34--38\,\%, depth
+by 4--13\,\%, latency by 14--16\,\%, and error by 10--12\,\% compared to
+\textsc{Sabre}.
+On IBM Flamingo, \textsc{DinamiQ} deliberately introduces additional
+\textsc{swap} gates and depth overhead (+32\,\% and +20\,\%, respectively)
+in order to avoid costly inter-chip \textsc{swap}s whose latency and error
+are amplified by the $7.4{\times}$ penalty factor.
+This trade-off pays off in the hardware-aware metrics: execution latency
+improves by 2.8\,\% and accumulated error drops by 15\,\%, demonstrating that
+\textsc{DinamiQ}'s cost model successfully prioritises physical execution
+fidelity over raw gate count when inter-chip communication is expensive.
+
+\begin{table}[t]
+\centering
+\caption{Routing results on chiplet-based QPU architectures evaluated using dynamically generated \textit{d-QUEKO} circuits, including a new 256-qubit benchmark designed to enforce inter-chip communication. Improvement is computed as $(\text{SABRE} - \text{Ours})/\text{SABRE} \times 100$, where positive values indicate that \textbf{DinamiQ} outperforms \textbf{SABRE}. The Heavy-Hexagon architecture consists of four $8\times8$ chips arranged in a $2\times2$ inter-chip connection grid. IBM Flamingo is modeled as three 156-qubit Kingston chips with a $7.4\times$ inter-chip latency and error penalty relative to intra-chip operations.}
+\label{tab:chiplet-results}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{ll rr c rr c rr c rr c}
+\toprule
+ & & \multicolumn{3}{c}{\textbf{SWAPs}} 
+   & \multicolumn{3}{c}{\textbf{Depth}} 
+   & \multicolumn{3}{c}{\textbf{Latency ($\mu$s)}} 
+   & \multicolumn{3}{c}{\textbf{Error}} \\
+\cmidrule(lr){3-5} \cmidrule(lr){6-8} \cmidrule(lr){9-11} \cmidrule(lr){12-14}
+\textbf{Topology} & \textbf{Qubits} 
+  & Ours & SABRE & Impr.\,(\%) 
+  & Ours & SABRE & Impr.\,(\%) 
+  & Ours & SABRE & Impr.\,(\%) 
+  & Ours & SABRE & Impr.\,(\%) \\
+\midrule
+Heavy Hexagon 8x8\_2x2 & 81  
+  & 2\,972 & 4\,508 & \textbf{+34.1} 
+  & 30\,146 & 34\,753 & \textbf{+13.3} 
+  & 45\,780 & 54\,644 & \textbf{+16.2} 
+  & 11.38 & 12.88 & \textbf{+11.6} \\
+Heavy Hexagon 8x8\_2x2 & 121 
+  & 4\,574 & 7\,409 & \textbf{+38.3} 
+  & 32\,961 & 34\,412 & \textbf{+4.2} 
+  & 50\,364 & 58\,325 & \textbf{+13.6} 
+  & 12.31 & 13.65 & \textbf{+9.9} \\
+\midrule
+IBM Flamingo  & 256 
+  & 15\,914 & 12\,074 & $-31.8$ 
+  & 40\,905 & 34\,199 & $-19.6$ 
+  & 5\,122\,044 & 5\,270\,446 & \textbf{+2.8} 
+  & 154.40 & 181.72 & \textbf{+15.0} \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}

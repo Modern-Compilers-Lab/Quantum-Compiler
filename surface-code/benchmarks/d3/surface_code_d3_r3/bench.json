@@ -11,6 +11,7 @@
   "total_cnots_unrolled": 72,
   "corrections_per_round": 8,
   "with_corrections": true,
-  "replicates": 3,
-  "base_seed": 42
+  "replicates": 1,
+  "base_seed": 42,
+  "generator": "stim 1.15.0 (surface_code:rotated_memory_z)"
 }
