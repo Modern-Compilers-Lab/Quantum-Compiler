@@ -173,7 +173,8 @@ def new_qlosure_poly_heuristic(
             err = _pair_error(Q1, Q2)
             hot_mult = 1.0 + lambda_hot * (usage01[Q1] + usage01[Q2]) * 0.5
             err_mult = 1.0 + beta_error * err
-            tmp += base_dist * hot_mult * err_mult
+            # tmp += base_dist * hot_mult * err_mult
+            tmp += base_dist   * err_mult * hot_mult
         deps = deps_count[g] if with_closure_depth else 0
         f_distance += (deps + 1) * tmp
 
@@ -190,7 +191,8 @@ def new_qlosure_poly_heuristic(
             err = _pair_error(Q1, Q2)
             hot_mult = 1.0 + lambda_hot * (usage01[Q1] + usage01[Q2]) * 0.5
             err_mult = 1.0 + beta_error * err
-            tmp += base_dist * hot_mult * err_mult
+            # tmp += base_dist * hot_mult * err_mult
+            tmp += base_dist  * err_mult * hot_mult
         deps = deps_count[g] if with_closure_depth else 0
         layer_factor = (extended_layer_index.get(g, 0) + 1) if with_layer_factor else 1
         e_distance += (deps + 1) * tmp / layer_factor
@@ -558,4 +560,196 @@ def evaluate_mapping_quality(front_layer, extended_layer, mapping, distance_matr
     return H
 
 
+
+
+# ── helpers ───────────────────────────────────────────────────────────────────
+ 
+def _scale01(counter):
+    """Min-max normalise Counter values to [0, 1]. Returns defaultdict(float)."""
+    if not counter:
+        return defaultdict(float)
+    lo = min(counter.values())
+    hi = max(counter.values())
+    if hi == lo:
+        return defaultdict(float)
+    return defaultdict(float, {k: (v - lo) / (hi - lo) for k, v in counter.items()})
+ 
+ 
+def _pair_error(qubit_props, p0, p1):
+    """
+    Return symmetric two-qubit gate error for physical pair (p0, p1).
+    Falls back to 0.0 if qubit_props is None or key is missing.
+ 
+    Expected qubit_props shape:
+        {
+          "0": {"two_qubit_err": {"1": 0.012, "2": 0.034}},
+          "1": {"two_qubit_err": {"0": 0.012}},
+          ...
+        }
+    """
+    if qubit_props is None:
+        return 0.0
+    try:
+        e01 = qubit_props[str(p0)]["two_qubit_err"].get(str(p1))
+    except (KeyError, AttributeError, TypeError):
+        e01 = None
+    try:
+        e10 = qubit_props[str(p1)]["two_qubit_err"].get(str(p0))
+    except (KeyError, AttributeError, TypeError):
+        e10 = None
+    if e01 is not None and e10 is not None:
+        return 0.5 * (e01 + e10)
+    return e01 if e01 is not None else (e10 if e10 is not None else 0.0)
+ 
+ 
+# ── main heuristic ────────────────────────────────────────────────────────────
+ 
+def dynamiq_poly_heuristic(
+    front_layer,
+    extended_layer,
+    mapping,
+    distance_matrix,
+    access,               # = self.node_data  {gate_id -> node_dict}
+    decay_parameter,
+    deps_count,
+    extended_layer_index,
+    gate,                 # candidate SWAP: (physical_q1, physical_q2)
+    alpha=1.0,
+    W_distance=1.0,
+    tie_breaker_weight=0.2,
+    c_g=None,
+    depths=None,
+    ablation_variant="default",
+    # ── new noise-aware parameters (all default to neutral / off) ──────
+    qubit_props=None,     # calibration dict for two-qubit errors
+    lambda_hot=0.5,       # hotspot-penalty weight  (set 0 to disable)
+    beta_error=1.0,       # error-penalty weight    (set 0 to disable)
+):
+    """
+    Noise-aware, hotspot-penalising SWAP heuristic.
+ 
+    Returns a scalar float H >= 0.
+    The router selects the SWAP candidate with *minimum* H.
+ 
+    access[g] must be a node dict with the key:
+        'coupled_qubits_accessed': [(logical_q1, logical_q2), ...]
+    e.g.
+        {'node_id': 1, 'qubits_accessed': [31, 38],
+         'coupled_qubits_accessed': [(31, 38)],
+         'operation_type': 'cz', 'is_control_flow': False}
+    """
+ 
+    # ── 0. build layer buckets ────────────────────────────────────────
+    layers = defaultdict(list)
+    for g in front_layer:
+        layers[0].append(g)
+    for g in extended_layer:
+        layers[extended_layer_index.get(g, 1)].append(g)
+ 
+    if not layers:
+        return 0.0
+ 
+    if c_g is None:
+        c_g = {}
+ 
+    # ── 1. hotspot usage density ──────────────────────────────────────
+    usage = Counter()
+    if lambda_hot > 0.0:
+        for g in (*front_layer, *extended_layer):
+            for q1, q2 in access[g]['coupled_qubits_accessed']:
+                usage[mapping[q1]] += 1
+                usage[mapping[q2]] += 1
+    usage01 = _scale01(usage)
+ 
+    # ── 2. decay / depth for the candidate SWAP ───────────────────────
+    max_decay = max(decay_parameter[gate[0]], decay_parameter[gate[1]])
+ 
+    if depths:
+        max_d = max(depths.values())
+        depth_rate = (
+            max(depths.get(gate[0], 0), depths.get(gate[1], 0)) / max_d
+            if max_d > 0 else 0.0
+        )
+    else:
+        depth_rate = 0.0
+ 
+    # ── 3. ablation-variant overrides (local copies, no mutation) ─────
+    _alpha      = alpha
+    _tie_w      = tie_breaker_weight
+    _depth_rate = depth_rate
+    _lambda_hot = lambda_hot
+    _beta_error = beta_error
+ 
+    if ablation_variant == "no_depth":
+        _depth_rate = 0.0
+    elif ablation_variant in ("no_layer_weight", "uniform_layer"):
+        _alpha = 0.0
+    elif ablation_variant == "aggressive_decay":
+        _alpha = 2.0
+    elif ablation_variant == "depth_priority":
+        _tie_w = 1.0
+    elif ablation_variant == "distance_only":
+        _depth_rate = 0.0
+        _lambda_hot = 0.0
+        _beta_error = 0.0
+ 
+    def gate_crit(g):
+        return max(0.01, c_g.get(g, 1.0))
+ 
+    def deps_w(g):
+        return deps_count[g] + 1
+ 
+    if ablation_variant == "no_crit_deps":
+        def gate_crit(g): return 1.0   # noqa: E306
+        def deps_w(g):    return 1      # noqa: E306
+ 
+    # ── 4. layer-weighted distance accumulation ───────────────────────
+    total_score = 0.0
+    total_lw    = 0.0
+ 
+    for i in range(len(layers)):
+        layer = layers[i]
+        if not layer:
+            continue
+ 
+        lw       = 1.0 / ((i + 1) ** _alpha)
+        total_lw += lw
+ 
+        w_dists = []
+        w_gates = []
+ 
+        for g in layer:
+            pairs = access[g]['coupled_qubits_accessed']
+            if not pairs:
+                continue
+ 
+            # average effective distance over all qubit pairs in this gate
+            pair_d = []
+            for q1, q2 in pairs:
+                P1 = mapping[q1]
+                P2 = mapping[q2]
+                d  = float(distance_matrix[P1][P2])
+ 
+                hot = (
+                    1.0 + _lambda_hot * (usage01[P1] + usage01[P2]) * 0.5
+                    if _lambda_hot > 0.0 else 1.0
+                )
+                err  = _pair_error(qubit_props, P1, P2)
+                pair_d.append(d * hot * (1.0 + _beta_error * err))
+ 
+            eff_d = sum(pair_d) / len(pair_d)   # explicit float, not generator
+            gw    = gate_crit(g) * deps_w(g)
+            w_dists.append(gw * eff_d)
+            w_gates.append(gw)
+ 
+        denom = sum(w_gates)
+        layer_dist = sum(w_dists) / denom if denom > 0.0 else 0.0
+        total_score += lw * layer_dist
+ 
+    if total_lw > 0.0:
+        total_score /= total_lw
+ 
+    # ── 5. final value ────────────────────────────────────────────────
+    H = float(max_decay * (W_distance * total_score + _tie_w * _depth_rate))
+    return H
 

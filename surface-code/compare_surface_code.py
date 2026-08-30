@@ -27,11 +27,12 @@ from src.evaluation import compute_max_swaps_count, compute_quantum_depth, estim
 from src.results_utils import RESULTS_ROOT, RESULTS_SUMMARY_ROOT, load_topology
 from qpu.src.load_backend import load_backend_data
 
-LOOP_ITERATIONS = 10  # unroll iterations for metric estimation
+LOOP_ITERATIONS = 10  # unroll iterations for metric estimation (default)
 
 
-def collect_results(results_dir: Path, qubit_props: dict):
+def collect_results(results_dir: Path, qubit_props: dict, loop_iterations: int = None):
     """Walk a results tree and return {(distance, rounds, circ): [(swaps, depth, latency, error, time), ...]}"""
+    iters = loop_iterations if loop_iterations is not None else LOOP_ITERATIONS
     data = defaultdict(list)
     if not results_dir.exists():
         return data
@@ -72,11 +73,11 @@ def collect_results(results_dir: Path, qubit_props: dict):
                         with open(time_path) as f:
                             elapsed = float(f.read().strip())
 
-                    swaps = compute_max_swaps_count(trace, loop_iterations=LOOP_ITERATIONS)
-                    depth = compute_quantum_depth(trace, loop_iterations=LOOP_ITERATIONS)
+                    swaps = compute_max_swaps_count(trace, loop_iterations=iters)
+                    depth = compute_quantum_depth(trace, loop_iterations=iters)
 
                     # Compute latency and error via dynamic scheduling
-                    dyn = estimate_dynamic_circuit(trace, qubit_props, loop_iterations=LOOP_ITERATIONS)
+                    dyn = estimate_dynamic_circuit(trace, qubit_props, loop_iterations=iters)
                     latency = dyn["max_time"]
                     error = dyn["max_error"]
 
@@ -279,6 +280,8 @@ def main():
                         help="Generate PDF comparison plots")
     parser.add_argument("--save-csv", action="store_true",
                         help="Save summary CSV")
+    parser.add_argument("--loop-iterations", type=int, default=None,
+                        help="Loop unroll iterations for metrics (default: 10)")
     args = parser.parse_args()
 
     # Load backend qubit properties for latency / error estimation
@@ -289,12 +292,16 @@ def main():
     ours_dir = RESULTS_ROOT / "qlosure" / args.results_tag / args.backend
     sabre_dir = RESULTS_ROOT / "sabre" / args.results_tag / args.backend
 
+    li = args.loop_iterations
+    if li is not None:
+        print(f"Using loop_iterations = {li}")
+
     print(f"Collecting Qlosure results from: {ours_dir}")
-    data_ours = collect_results(ours_dir, qubit_props)
+    data_ours = collect_results(ours_dir, qubit_props, loop_iterations=li)
     print(f"  Found {sum(len(v) for v in data_ours.values())} trace files")
 
     print(f"Collecting SABRE results from: {sabre_dir}")
-    data_sabre = collect_results(sabre_dir, qubit_props)
+    data_sabre = collect_results(sabre_dir, qubit_props, loop_iterations=li)
     print(f"  Found {sum(len(v) for v in data_sabre.values())} trace files")
 
     df_ours = compute_summary(data_ours)

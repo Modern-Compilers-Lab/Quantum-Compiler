@@ -1,0 +1,36 @@
+
+======================================================================
+MECH QPU SPECIFICATION
+======================================================================
+structure            : heavy_square
+array dim            : (3, 3)
+chiplet size         : (8, 8)
+cross-link sparsity  : 1
+total qubits         : 432
+data qubits          : 351
+highway qubits       : 81
+highway percentage   : 18.75%
+
+======================================================================
+PHYSICAL CONNECTIVITY
+======================================================================
+on-chip edges        : 504
+cross-chip edges     : 12
+cross-chip edge ratio: 2.33%
+
+======================================================================
+COUPLING GRAPH STATS
+======================================================================
+local graph          : nodes=351, edges=306, degree(min/avg/max)=(0/1.74/4)
+highway graph        : nodes=81, edges=84, degree(min/avg/max)=(1/2.07/4)
+data->highway dist   : min=1, avg=2.08, max=4
+30712/61425 gates are selected: [(0, 1), (0, 2), (0, 3), (0, 4), (0, 10), (0, 11), (0, 14), (0, 17), (0, 22), (0, 23)]...[(343, 349), (344, 345), (344, 348), (344, 349), (345, 346), (345, 348), (346, 348), (346, 350), (347, 348), (348, 349)]
+----------------executing  bv
+0/1
+
+======================================================================
+ESTIMATED LATENCY / COST (MECH)
+======================================================================
+weights              : cross-chip=7.4, measurement=2.2
+periods              : prep=auto, meas=2
+bv                   depth=43, eff_gate_num=1452.3999999999999, on-chip=1168, cross-chip=9, meas=99, shuttles=1

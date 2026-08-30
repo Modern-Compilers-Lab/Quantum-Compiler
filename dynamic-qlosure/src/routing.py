@@ -290,9 +290,14 @@ class Qlosure():
             # score = qlosure_poly_heuristic(self.front_layer, self.extended_layer, temp_mapping_dict, 
             #                             self.distance_matrix, self.node_data, self.decay_parameter, self.dag_dependencies_count, extended_layer_index, swap_gate)
             # # used one  
+            # score = dynamiq_poly_heuristic(self.front_layer, self.extended_layer, temp_mapping_dict,
+            #                                     self.distance_matrix, self.node_data, self.decay_parameter, self.dag_dependencies_count, extended_layer_index, swap_gate,qubit_props=self.qubit_props)
             score = new_qlosure_poly_heuristic(self.front_layer, self.extended_layer, temp_mapping_dict,
-                                                self.distance_matrix, self.node_data, self.decay_parameter, self.dag_dependencies_count, extended_layer_index, swap_gate,qubit_props=self.qubit_props)
+                            self.distance_matrix, self.node_data, self.decay_parameter, self.dag_dependencies_count, extended_layer_index, swap_gate,qubit_props=self.qubit_props)
             
+
+
+
             # no error and hotspot
             # score = new_qlosure_poly_heuristic(self.front_layer, self.extended_layer, temp_mapping_dict,
             #                                     self.distance_matrix, self.node_data, self.decay_parameter, self.dag_dependencies_count, extended_layer_index, swap_gate,qubit_props=self.qubit_props,lambda_hot=0, alpha_usage=1, beta_error=0)

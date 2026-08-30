@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
+from matplotlib.ticker import ScalarFormatter
 import os
 
 
@@ -13,17 +14,32 @@ def plot_routing_from_csv(csv_path, nb_qubits, nb_loop_iterations, topology_name
     """
     # Global style for all plots
     plt.rcParams.update({
-        "font.size": 20,              # base font size
-        "axes.titlesize": 22,         # in case titles are used later
-        "axes.labelsize": 22,         # axis labels (x/y)
-        "xtick.labelsize": 18,
-        "ytick.labelsize": 18,
-        "legend.fontsize": 18,
-        "legend.title_fontsize": 20,
-        "lines.linewidth": 2.5,
-        "lines.markersize": 8,
-        "figure.dpi": 300 ,        # ensure crisp rendering in PDF
-    })
+            "font.size": 20,              # base font size
+            "axes.titlesize": 22,         # in case titles are used later
+            "axes.labelsize": 22,         # axis labels (x/y)
+            "xtick.labelsize": 18,
+            "ytick.labelsize": 18,
+            "legend.fontsize": 18,
+            "legend.title_fontsize": 20,
+            "lines.linewidth": 2.5,
+            "lines.markersize": 8,
+            "figure.dpi": 300 ,        # ensure crisp rendering in PDF
+        })
+    size = "large"  # "small" for quick drafts, "large" for final paper
+
+    if size == "large":
+        plt.rcParams.update({
+            "font.size": 32,              # base font size
+            "axes.titlesize": 34,         # in case titles are used later
+            "axes.labelsize": 34,         # axis labels (x/y)
+            "xtick.labelsize": 32,
+            "ytick.labelsize": 32,
+            "legend.fontsize": 30,
+            "legend.title_fontsize": 34,
+            "lines.linewidth": 2.5,
+            "lines.markersize": 20,
+            "figure.dpi": 300 ,        # ensure crisp rendering in PDF
+        })
     # plt.rcParams["font.family"] = "serif"
     # plt.rcParams["font.serif"] = ["Times New Roman", "Times", "Computer Modern Roman"]
     plt.rcParams["pdf.fonttype"] = 42   # embed text as real text, not paths
@@ -58,7 +74,7 @@ def plot_routing_from_csv(csv_path, nb_qubits, nb_loop_iterations, topology_name
 
 
     def save_plot(y_ours, y_ours_std, y_sabre, y_sabre_std, y_label, legend_loc, fname_stub):
-        fig, ax = plt.subplots(figsize=(8.5,5.5))
+        fig, ax = plt.subplots(figsize=(8.5,6.5)) # originally (8.5, 5.5) but increased width for better legend spacing
         ax.plot(df["leaf_depth"], y_ours, marker='o', label="Us")
         if topology_name == "ibm_kingston" and nb_qubits == 121 and (fname_stub == "latency_vs-leaf-depth" or fname_stub == "quantum-depth_vs-leaf-depth"):
             y_ours_std = [val * .6 for val in y_ours_std]
@@ -69,7 +85,18 @@ def plot_routing_from_csv(csv_path, nb_qubits, nb_loop_iterations, topology_name
 
         ax.set_xlabel("Leaf Depth")
         ax.set_ylabel(y_label)
-        ax.legend(loc=legend_loc, frameon=False)
+        if legend_loc == "lower left":
+            ax.legend(loc=legend_loc, bbox_to_anchor=(0.0, -0.05), labelspacing=.2, frameon=False)
+        elif legend_loc == "upper left":
+                    # Set y to 1.02 to raise it slightly above the top plot boundary
+                    ax.legend(
+                        loc="upper left",
+                        bbox_to_anchor=(0.0, 1.05),
+                        labelspacing=0.2,
+                        frameon=False,
+                    )
+        else:
+            ax.legend(loc=legend_loc,labelspacing=.2, frameon=False)
         ax.grid(True, alpha=0.3)
         plt.tight_layout()
 
@@ -77,17 +104,46 @@ def plot_routing_from_csv(csv_path, nb_qubits, nb_loop_iterations, topology_name
             ax.set_yscale("log")
         ax.set_ylim(bottom=0)
 
+
         out_path = os.path.join(out_dir, f"{base_tag}_{fname_stub}.pdf")
         plt.savefig(out_path, format="pdf", bbox_inches="tight")
         plt.close(fig)
         print(f"📄 Saved: {out_path}")
 
-    save_plot(df["swaps_mean_ours"], df["swaps_std_ours"], df["swaps_mean_sabre"], df["swaps_std_sabre"],
-              "Max SWAPs Count", "lower left", "max-swaps_vs-leaf-depth")
-    save_plot(df["depth_mean_ours"], df["depth_std_ours"], df["depth_mean_sabre"], df["depth_std_sabre"],
-              "Depth", "upper left", "quantum-depth_vs-leaf-depth")
-    save_plot(df["latency_mean_ours"], df["latency_std_ours"], df["latency_mean_sabre"], df["latency_std_sabre"],
-              "Latency $(\mu s)$", "upper left", "latency_vs-leaf-depth")
+    # save_plot(df["swaps_mean_ours"], df["swaps_std_ours"], df["swaps_mean_sabre"], df["swaps_std_sabre"],
+    #           "SWAPs", "lower left", "max-swaps_vs-leaf-depth")
+    save_plot(
+        df["swaps_mean_ours"] / 1e3,
+        df["swaps_std_ours"] / 1e3,
+        df["swaps_mean_sabre"] / 1e3,
+        df["swaps_std_sabre"] / 1e3,
+        "SWAPs (×10³)",   # label updated
+        "lower left",
+        "max-swaps_vs-leaf-depth"
+    )
+
+    # save_plot(df["depth_mean_ours"], df["depth_std_ours"], df["depth_mean_sabre"], df["depth_std_sabre"],
+    #           "Depth", "upper left", "quantum-depth_vs-leaf-depth")
+    save_plot(
+        df["depth_mean_ours"] / 1e3,
+        df["depth_std_ours"] / 1e3,
+        df["depth_mean_sabre"] / 1e3,
+        df["depth_std_sabre"] / 1e3,
+        "Depth (×10³)",   # label updated
+        "upper left",
+        "quantum-depth_vs-leaf-depth"
+    )
+    # save_plot(df["latency_mean_ours"], df["latency_std_ours"], df["latency_mean_sabre"], df["latency_std_sabre"],
+    #           "Latency $(\mu s)$", "upper left", "latency_vs-leaf-depth")
+    save_plot(
+        df["latency_mean_ours"] / 1e6,
+        df["latency_std_ours"] / 1e6,
+        df["latency_mean_sabre"] / 1e6,
+        df["latency_std_sabre"] / 1e6,
+        "Latency (s)",   # ← updated label
+        "upper left",
+        "latency_vs-leaf-depth"
+    )
     save_plot(df["error_mean_ours"], df["error_std_ours"], df["error_mean_sabre"], df["error_std_sabre"],
               "Error Rate", "upper left", "error-rate_vs-leaf-depth")
 
@@ -120,6 +176,24 @@ def plot_routing_ablation_study(csv_path, nb_qubits, nb_loop_iterations, topolog
         "lines.markersize": 10,
         "figure.dpi": 300 ,        # ensure crisp rendering in PDF
     })
+
+
+
+    size = "large"  # "small" for quick drafts, "large" for final paper
+    if size == "large":
+        plt.rcParams.update({
+            "font.size": 32,              # base font size
+            "axes.titlesize": 34,         # in case titles are used later
+            "axes.labelsize": 34,         # axis labels (x/y)
+            "xtick.labelsize": 32,
+            "ytick.labelsize": 32,
+            "legend.fontsize": 30,
+            "legend.title_fontsize": 34,
+            "lines.linewidth": 2.5,
+            "lines.markersize": 20,
+            "figure.dpi": 300 ,        # ensure crisp rendering in PDF
+        })
+
     # plt.rcParams["font.family"] = "serif"
     # plt.rcParams["font.serif"] = ["Times New Roman", "Times", "Computer Modern Roman"]
     plt.rcParams["pdf.fonttype"] = 42   # embed text as real text, not paths
@@ -160,6 +234,10 @@ def plot_routing_ablation_study(csv_path, nb_qubits, nb_loop_iterations, topolog
 
             y_mean = df[mean_col].astype(float)
             y_std  = df[std_col].astype(float)
+            if metric != "error":
+                y_mean = df[mean_col].astype(float) / 1e3  # scale down for better visualization (except error rate)
+                y_std  = df[std_col].astype(float) / 1e3  # scale down for better visualization (except error rate)
+
 
 
             ax.errorbar(
@@ -193,13 +271,17 @@ def plot_routing_ablation_study(csv_path, nb_qubits, nb_loop_iterations, topolog
                 frameon=True,           # <-- turn legend box ON
                 fancybox=True,          # rounded corners (optional)
                 edgecolor="black",      # border color
-                framealpha=0.3,         # slightly transparent
-                borderpad=0.5,          # padding inside the box
+                framealpha=0.4,         # slightly transparent
+                borderpad=0.1,          # padding inside the box
                 columnspacing=0.8,
                 handletextpad=0.4,
+                labelspacing=.1,
+                bbox_to_anchor=(0.0, -0.05)
             )
         else:
-            ax.legend(loc=legend_loc, frameon=True, fancybox=True, edgecolor="black", framealpha=0.3)
+            ax.legend(loc=legend_loc, frameon=True, fancybox=True, edgecolor="black", framealpha=0.3, labelspacing=.1,    bbox_to_anchor=(0.0, 1.05)  )
+
+        
 
         # ax.legend(loc=legend_loc, frameon=False)
         ax.grid(True, alpha=0.3)
@@ -213,10 +295,11 @@ def plot_routing_ablation_study(csv_path, nb_qubits, nb_loop_iterations, topolog
         print(f"📄 Saved: {out_path}")
 
 
-    save_metric_plot("swaps", "SWAPs", "lower left", "max-swaps_vs-leaf-depth")
-    save_metric_plot("depth", "Depth", "upper left", "quantum-depth_vs-leaf-depth")
-    save_metric_plot("latency", "Latency", "upper left", "latency_vs-leaf-depth")
+    save_metric_plot("swaps", "SWAPs (×10³)", "lower left", "max-swaps_vs-leaf-depth")
+    save_metric_plot("depth", "Depth (×10³)", "upper left", "quantum-depth_vs-leaf-depth")
+    save_metric_plot("latency", "Latency ($ms$)", "upper left", "latency_vs-leaf-depth")
     save_metric_plot("error", "Error Rate", "upper left", "error-rate_vs-leaf-depth")
+
 
 
     # ------------------ Improvements table ------------------
@@ -271,40 +354,44 @@ def plot_routing_ablation_study(csv_path, nb_qubits, nb_loop_iterations, topolog
     print(improvements_df.to_string(index=False))
 
 if __name__ == "__main__":
-    # LOOP_ITERATIONS = 10
-    # nb_qubits = [54, 81, 121]
-    # backends = [ "ibm_brisbane_old","ibm_kingston"]
-    # for backend in backends:
-    #     improvement_df = pd.DataFrame(columns=["SWAPs", "Depth", "Latency", "Error"])
-    #     for nq in nb_qubits:
-    #         csv_path = f"results-summary/{backend}_{nq}qbt_{LOOP_ITERATIONS}iter_metrics.csv"
-
-    #         # csv_path = f"results-summary/nested_experiments/nest2/{backend}_{nq}qbt_{LOOP_ITERATIONS}iter_metrics.csv"
-    #         average_improvment = plot_routing_from_csv(
-    #             csv_path=csv_path,
-    #             nb_qubits=nq,
-    #             nb_loop_iterations=LOOP_ITERATIONS,
-    #             topology_name=backend,
-    #             images_root="paper-images/US/main",)
-    #         improvement_df.loc[f"{nq} qubits"] = average_improvment
+    pass
+    LOOP_ITERATIONS = 10
+    nb_qubits = [54, 81, 121]
+    backends = [ "ibm_brisbane_old","ibm_kingston"]
+    for backend in backends:
+        improvement_df = pd.DataFrame(columns=["SWAPs", "Depth", "Latency", "Error"])
+        for nq in nb_qubits:
+            # print working direactory
+            print(f"Current working directory: {os.getcwd()}")
+            # exit(0)
+            csv_path = f"results-summary/main/{backend}_{nq}qbt_{LOOP_ITERATIONS}iter_metrics.csv"
+            # csv_path = fr"C:/Users/ASUS ROG/OneDrive/Desktop/dev/Quantum/PFE/quantum-compiler/dynamic-qlosure/results-summary/{backend}_{nq}qbt_{LOOP_ITERATIONS}iter_metrics.csv"
+            # csv_path = f"results-summary/nested_experiments/nest2/{backend}_{nq}qbt_{LOOP_ITERATIONS}iter_metrics.csv"
+            average_improvment = plot_routing_from_csv(
+                csv_path=csv_path,
+                nb_qubits=nq,
+                nb_loop_iterations=LOOP_ITERATIONS,
+                topology_name=backend,
+                images_root="paper-images/US/main-big-tall",)
+            improvement_df.loc[f"{nq} qubits"] = average_improvment
             
-    #     print(f"\nAverage Improvement Summary for backend: {backend}")
-    #     print(improvement_df.to_string(float_format="%.2f"))
+        print(f"\nAverage Improvement Summary for backend: {backend}")
+        print(improvement_df.to_string(float_format="%.2f"))
             
-    plot_routing_ablation_study(
-        csv_path="results-summary/ablation_study5/ibm_brisbane_old_81qbt_10iter_metrics_ablation_study.csv",
-        nb_qubits=81,
-        nb_loop_iterations=10,
-        topology_name="ibm_brisbane_old",
-        template="nest0",
-        images_root="paper-images/US/ablation-study",
-        use_log_scale=False,)
+    # plot_routing_ablation_study(
+    #     csv_path="results-summary/ablation_study5/ibm_brisbane_old_81qbt_10iter_metrics_ablation_study.csv",
+    #     nb_qubits=81,
+    #     nb_loop_iterations=10,
+    #     topology_name="ibm_brisbane_old",
+    #     template="nest0",
+    #     images_root="paper-images/US/ablation-study-big",
+    #     use_log_scale=False,)
 
-    plot_routing_ablation_study(
-        csv_path="results-summary/ablation_study5/ibm_brisbane_old_121qbt_10iter_metrics_ablation_study.csv",
-        nb_qubits=121,
-        nb_loop_iterations=10,
-        topology_name="ibm_brisbane_old",
-        template="nest0",
-        images_root="paper-images/US/ablation-study",
-        use_log_scale=False,)
+    # plot_routing_ablation_study(
+    #     csv_path="results-summary/ablation_study5/ibm_brisbane_old_121qbt_10iter_metrics_ablation_study.csv",
+    #     nb_qubits=121,
+    #     nb_loop_iterations=10,
+    #     topology_name="ibm_brisbane_old",
+    #     template="nest0",
+    #     images_root="paper-images/US/ablation-study-big",
+    #     use_log_scale=False,)

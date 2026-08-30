@@ -18,6 +18,10 @@ BACKEND_FILE_MAP = {
     "heavy_square": "backend_heavy_square_2x2_8x8.json",
     "ibm_brisbane_old": "ibm_brisbane_old.json",
     "ibm_flamingo": "ibm_flamingo.json",
+    "mech_heavy_hex": "mech_heavy_hex_3x4_8x8.json",
+    "mech_heavy_square": "mech_heavy_square_3x3_8x8.json",
+    "mech_hex": "mech_hex_3x3_8x8.json",
+    "mech_square": "mech_square_3x3_7x7.json",
 }
 
 
