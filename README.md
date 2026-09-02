@@ -23,6 +23,7 @@ individual experiments using:
 
 ```
 quantum-compiler/
+├─ README.md                   # This file
 ├─ artifact/
 │  ├─ render/                  # One module per paper figure and table
 │  ├─ output/                  # (Created at runtime) CSVs, figures, tables
@@ -158,7 +159,7 @@ Measured on this machine, per DynamiQ mapping; Sabre is sub-second throughout.
 | `main`         | 1080 | 5-6 h                                 |
 | `chiplet`      | 162  | 3-4 h                                 |
 | `surface-code` | 342  | 30 min                                |
-| `nested`       | 150  | several h (deep nesting is expensive) |
+| `nested`       | 150  | 24 h (deep nesting is expensive)      |
 | `timing`       | 540  | 1 h                                   |
 | `ablation`     | 720  | 4-6 h                                 |
 
@@ -178,13 +179,6 @@ Under `auto` you can regenerate one experiment and still render everything; the
 closing summary lists which CSVs fell back.
 
 ---
-
-## Notes
-
-- Benchmarks are treated as fixed inputs and are never regenerated. Every trace
-  and CSV is produced by the run.
-- Table 6 is wall-clock, so it reflects the machine that ran it. Use `--jobs 1`
-  for numbers comparable to the paper's single-core measurement.
 
 Please contact the authors with ANY issues that arise and we will be glad to
 help.
