@@ -304,31 +304,7 @@ class Qlosure():
                 self.mapping_dict, self.reverse_mapping_dict, swap_gate
             )
 
-            # old
-            # score = qlosure_poly_heuristic(self.front_layer, self.extended_layer, temp_mapping_dict, 
-            #                             self.distance_matrix, self.node_data, self.decay_parameter, self.dag_dependencies_count, extended_layer_index, swap_gate)
-            # # used one  
-            # score = dynamiq_poly_heuristic(self.front_layer, self.extended_layer, temp_mapping_dict,
-            #                                     self.distance_matrix, self.node_data, self.decay_parameter, self.dag_dependencies_count, extended_layer_index, swap_gate,qubit_props=self.qubit_props)
-            # # score = new_qlosure_poly_heuristic(self.front_layer, self.extended_layer, temp_mapping_dict,
-            #                 self.distance_matrix, self.node_data, self.decay_parameter, self.dag_dependencies_count, extended_layer_index, swap_gate,qubit_props=self.qubit_props)
-            
-
-
-
-            # no error and hotspot
-            # score = new_qlosure_poly_heuristic(self.front_layer, self.extended_layer, temp_mapping_dict,
-            #                                     self.distance_matrix, self.node_data, self.decay_parameter, self.dag_dependencies_count, extended_layer_index, swap_gate,qubit_props=self.qubit_props,lambda_hot=0, alpha_usage=1, beta_error=0)
-            
-            # hostspot
-            # score = new_qlosure_poly_heuristic(self.front_layer, self.extended_layer, temp_mapping_dict,
-            #                                     self.distance_matrix, self.node_data, self.decay_parameter, self.dag_dependencies_count, extended_layer_index, swap_gate,qubit_props=self.qubit_props,lambda_hot=1, alpha_usage=1, beta_error=0)
-            
-            # depth rate
-            # score = depth_poly_heuristic(self.front_layer, self.extended_layer, temp_mapping_dict,
-            #                                     self.distance_matrix, self.node_data, self.decay_parameter, self.dag_dependencies_count, extended_layer_index, swap_gate,qubit_props=self.qubit_props,lambda_hot=1, alpha_usage=1, beta_error=0)
-            
-            # depth rate + error
+            # scorer is selected by the ablation config; see ABLATION_CONFIGS
             if self.scorer == "distance":
                 score = distance_poly_heuristic(self.front_layer, self.extended_layer, temp_mapping_dict,
                                                 self.distance_matrix, self.node_data, self.decay_parameter, self.dag_dependencies_count, extended_layer_index, swap_gate)
@@ -341,10 +317,6 @@ class Qlosure():
             
 
 
-
-            # # distance only
-            # score = distance_poly_heuristic(self.front_layer, self.extended_layer, temp_mapping_dict,
-            #                                     self.distance_matrix, self.node_data, self.decay_parameter, self.dag_dependencies_count, extended_layer_index, swap_gate)
 
             heuristic_score[swap_gate] = score
 

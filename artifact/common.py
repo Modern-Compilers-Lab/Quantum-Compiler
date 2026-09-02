@@ -138,12 +138,8 @@ def saved(path: Path) -> None:
 
 
 def warn_partial(df, *key_cols, col="n_leaf_depths", expected=9):
-    """Report how many leaf depths went into each cell.
-
-    A partial generate (--leaf-depths / --widths) yields cells averaged over
-    fewer points than the rest. Averaged together they are not comparable, and
-    without this the table looks complete.
-    """
+    """Report how many leaf depths went into each cell. A narrowed run
+    (--widths / --leaf-depths) leaves cells that are not comparable."""
     counts = sorted(set(df[col]))
     if counts == [expected]:
         print(f"  {expected} leaf depths per cell.")

@@ -60,8 +60,7 @@ def build_dqueko_jobs(exp, widths, leaf_depths, force, ablation=None):
 
 
 def build_ablation_jobs(exp, widths, leaf_depths, force):
-    """One DynamiQ run per ablation rung. Traces are kept in separate trees so
-    the rungs cannot overwrite each other or the main run."""
+    """One DynamiQ run per ablation rung, each in its own trace tree."""
     jobs = []
     for cfg in exp.configs:
         for backend in exp.backends:
@@ -131,8 +130,8 @@ def _run_serial(jobs, done, failed, total, t0, offset=0):
 
 
 def run_jobs(jobs, n_jobs):
-    """Run every job, halving the worker count and finally falling back to
-    serial if the pool dies (an out-of-memory kill breaks the whole pool)."""
+    """Run every job, halving the worker count and falling back to serial if
+    the pool dies (an out-of-memory kill breaks the whole pool)."""
     if not jobs:
         print("  nothing to run")
         return 0, 0
@@ -205,8 +204,8 @@ def merge_pairwise(df_ours, df_sabre, group):
 
 
 def summarise_dqueko(exp, csv_root, loop_iterations, widths=None, leaf_depths=None):
-    """Aggregate traces into one CSV per (backend, bench). ``widths`` and
-    ``leaf_depths`` must match the run, or stale traces get swept in."""
+    """Aggregate traces into one CSV per (backend, bench), restricted the same
+    way as the run."""
     written = []
     for backend in exp.backends:
         benches = exp.benches[backend] if isinstance(exp.benches, dict) else exp.benches

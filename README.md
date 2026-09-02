@@ -24,4 +24,3 @@ python artifact/render.py all          # figures and tables, seconds
 | `d-queko/benchmarks/` | d-QUEKO dynamic circuits |
 | `surface-code/` | Stim surface-code circuits |
 | `qpu/topologies/` | backend coupling maps and calibration |
-| `paper/` | the paper and its artifact appendix |

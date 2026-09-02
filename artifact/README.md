@@ -37,10 +37,9 @@ quantum-compiler/
 ├─ d-queko/benchmarks/         # d-QUEKO dynamic circuits (QASM3)
 ├─ surface-code/               # Stim surface-code circuits + scripts
 ├─ qpu/topologies/             # JSON hardware topologies + calibration
-├─ dynamic-qlosure/
-│  ├─ src/                     # Main DynamiQ framework code
-│  └─ results-summary/         # Reference CSVs from the paper's runs
-└─ paper/paper-174.pdf
+└─ dynamic-qlosure/
+   ├─ src/                     # Main DynamiQ framework code
+   └─ results-summary/         # Reference CSVs from the paper's runs
 ```
 
 ---
