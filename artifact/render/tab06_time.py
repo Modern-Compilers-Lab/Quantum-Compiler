@@ -15,13 +15,12 @@ from csv_sources import GENERATED_ROOT
 
 BACKENDS = ["ibm_kingston", "ibm_brisbane_old"]
 WIDTHS = [54, 81, 121]
-SEEDS = [3, 21, 42, 63, 84, 105, 126, 147, 168, 189]
 CATEGORIES = {"Small (10-30)": [10, 20, 30],
               "Med. (40-60)": [40, 50, 60],
               "Large (70-90)": [70, 80, 90]}
 
 GENERATED_CSV = GENERATED_ROOT / "time" / "mapping_time.csv"
-COMMITTED_ROOT = SUMMARY_ROOT / "time" / "qroqi" / "one_loop"
+COMMITTED_CSV = SUMMARY_ROOT / "time" / "mapping_time.csv"
 
 
 def from_generated():
@@ -33,19 +32,12 @@ def from_generated():
 
 
 def from_committed():
+    if not COMMITTED_CSV.exists():
+        return {}
+    df = pd.read_csv(COMMITTED_CSV)
     out = {}
-    for backend in BACKENDS:
-        for nq in WIDTHS:
-            base = COMMITTED_ROOT / backend / f"{nq}qbt"
-            by_depth = {}
-            for d in range(10, 91, 10):
-                cfg = base / f"queko-{nq:03d}qbt_nest_00_nodes001_leaf-depth-{d}"
-                vals = [float((cfg / f"SEED_{s}" / "time.txt").read_text().strip())
-                        for s in SEEDS if (cfg / f"SEED_{s}" / "time.txt").exists()]
-                if vals:
-                    by_depth[d] = float(np.mean(vals))
-            if by_depth:
-                out[(backend, nq)] = by_depth
+    for (backend, nq), sub in df.groupby(["backend", "qubits"]):
+        out[(backend, int(nq))] = sub.groupby("leaf_depth")["time_s"].mean().to_dict()
     return out
 
 
