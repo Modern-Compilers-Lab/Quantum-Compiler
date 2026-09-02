@@ -9,7 +9,7 @@ from __future__ import annotations
 import pandas as pd
 
 from common import (METRICS, BACKEND_LABELS, banner, load_pairwise_summary,
-                    saved, table_dir)
+                    saved, table_dir, warn_partial)
 from csv_sources import resolve
 
 BACKENDS = ["ibm_brisbane_old", "ibm_kingston"]
@@ -60,7 +60,8 @@ def run(args):
     print(f"  source: {'/'.join(sorted(origins))} CSVs\n")
     render(df, BACKENDS, WIDTHS)
     print("\n  S=SWAPs D=Depth L=Latency E=Error   "
-          f"loops x{args.loop_iterations}, {df.n_leaf_depths.iloc[0]} leaf depths per cell")
+          f"loops x{args.loop_iterations}")
+    warn_partial(df, "backend", "qubits")
 
     out = table_dir("tab03") / "table03_main_improvements.csv"
     df.to_csv(out, index=False)

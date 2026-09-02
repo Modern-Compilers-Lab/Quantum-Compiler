@@ -135,3 +135,24 @@ def banner(title: str, subtitle: str = "") -> None:
 
 def saved(path: Path) -> None:
     print(f"  saved  {path.relative_to(REPO_ROOT) if REPO_ROOT in path.parents else path}")
+
+
+def warn_partial(df, *key_cols, col="n_leaf_depths", expected=9):
+    """Report how many leaf depths went into each cell.
+
+    A partial generate (--leaf-depths / --widths) yields cells averaged over
+    fewer points than the rest. Averaged together they are not comparable, and
+    without this the table looks complete.
+    """
+    counts = sorted(set(df[col]))
+    if counts == [expected]:
+        print(f"  {expected} leaf depths per cell.")
+        return
+    print(f"  NOTE: cells are averaged over differing numbers of leaf depths "
+          f"(expected {expected}).")
+    for _, r in df.iterrows():
+        n = int(r[col])
+        flag = "" if n == expected else "   <- partial"
+        label = " / ".join(str(r[k]) for k in key_cols)
+        print(f"    {label:<28} {n} leaf depth{'s' if n != 1 else ''}{flag}")
+    print("  Regenerate the partial ones for a like-for-like comparison.")

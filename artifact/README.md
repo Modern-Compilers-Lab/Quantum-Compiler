@@ -13,9 +13,9 @@ experimentation pipeline — from benchmark loading, invoking DynamiQ and the
 Qiskit Sabre baseline, to plotting — automatically. Reviewers may also run
 individual experiments using:
 
--   **`run_circuit.py`**: to run DynamiQ on a single circuit
--   **`generate.py`**: to run DynamiQ and Sabre on one experiment's benchmarks
--   **`render.py`**: to produce a single figure or table from the results
+- **`run_circuit.py`**: to run DynamiQ on a single circuit
+- **`generate.py`**: to run DynamiQ and Sabre on one experiment's benchmarks
+- **`render.py`**: to produce a single figure or table from the results
 
 ---
 
@@ -127,17 +127,17 @@ python artifact/run_all_experiments.py --jobs 4
 
 ## What maps to what
 
-| Paper item | Render | Experiment | Backends |
-|---|---|---|---|
-| Figure 1 | `fig01` | `main`, `nested` | Kingston, Brisbane |
-| Figure 8 | `fig08` | `main` | Brisbane |
-| Figure 9 | `fig09` | `nested` | Kingston |
-| Figure 10 | `fig10` | `ablation` | Brisbane |
-| Table 3 | `tab03` | `main` | Brisbane, Kingston |
-| Table 4 | `tab04` | `chiplet` | Heavy-Hexagon 8x8_2x2, IBM Flamingo |
-| Table 5 | `tab05` | `surface-code` | Brisbane, MECH 3x4 |
-| Table 6 | `tab06` | `timing` | Kingston, Brisbane |
-| Table 7 | `tab07` | `ablation` | Brisbane |
+| Paper item | Render  | Experiment       | Backends                            |
+| ---------- | ------- | ---------------- | ----------------------------------- |
+| Figure 1   | `fig01` | `main`, `nested` | Kingston, Brisbane                  |
+| Figure 8   | `fig08` | `main`           | Brisbane                            |
+| Figure 9   | `fig09` | `nested`         | Kingston                            |
+| Figure 10  | `fig10` | `ablation`       | Brisbane                            |
+| Table 3    | `tab03` | `main`           | Brisbane, Kingston                  |
+| Table 4    | `tab04` | `chiplet`        | Heavy-Hexagon 8x8_2x2, IBM Flamingo |
+| Table 5    | `tab05` | `surface-code`   | Brisbane, MECH 3x4                  |
+| Table 6    | `tab06` | `timing`         | Kingston, Brisbane                  |
+| Table 7    | `tab07` | `ablation`       | Brisbane                            |
 
 ```bash
 python artifact/generate.py --list
@@ -149,35 +149,19 @@ Output lands in `artifact/output/`: `csv/` from generate, `figures/` and
 
 ---
 
-## Experiment settings
-
-Fixed by Sec. 7.1 and reflected in `experiments.py`:
-
-- Sabre baseline: `SabreSwap` with `heuristic='decay'`, `trials=1`, on an
-  identity layout, so gate count and initial placement match DynamiQ's.
-- Loops are scored at 10 iterations; conditionals take the worst branch.
-- `main` and `timing` sweep 10 seeds; `chiplet` and `surface-code` use 3.
-- Surface-code traces are scored at `loop_iterations=10` on Brisbane and 3 on
-  MECH, which only has r=3.
-- The ablation runs the four cumulative configurations of Sec. 7.6.2, selected
-  with `--ablation 1..4`: distance only, + error, + depth rate, + loop-entry
-  remapping.
-
----
-
 ## Runtimes
 
 Measured on this machine, per DynamiQ mapping; Sabre is sub-second throughout.
 `--jobs N` runs N mappings in parallel.
 
-| Experiment | Runs | Approx. time at `--jobs 4` |
-|---|---|---|
-| `main` | 1080 | 5-6 h |
-| `chiplet` | 162 | 3-4 h |
-| `surface-code` | 342 | 30 min |
-| `nested` | 150 | several h (deep nesting is expensive) |
-| `timing` | 540 | 1 h |
-| `ablation` | 720 | 4-6 h |
+| Experiment     | Runs | Approx. time at `--jobs 4`            |
+| -------------- | ---- | ------------------------------------- |
+| `main`         | 1080 | 5-6 h                                 |
+| `chiplet`      | 162  | 3-4 h                                 |
+| `surface-code` | 342  | 30 min                                |
+| `nested`       | 150  | several h (deep nesting is expensive) |
+| `timing`       | 540  | 1 h                                   |
+| `ablation`     | 720  | 4-6 h                                 |
 
 Memory is the binding constraint on the widest circuits: the 256-qubit Flamingo
 benchmark can exhaust RAM at `--jobs 8`. `generate.py` recovers by halving the
@@ -185,11 +169,11 @@ worker count and retrying, but `--jobs 2` is safer for `chiplet`.
 
 Choosing the CSV source:
 
-| `--source` | behaviour |
-|---|---|
+| `--source`       | behaviour                                                     |
+| ---------------- | ------------------------------------------------------------- |
 | `auto` (default) | prefer a CSV from `generate.py`, fall back to the shipped one |
-| `generated` | only your own CSVs; skip items you have not generated |
-| `committed` | only the shipped CSVs |
+| `generated`      | only your own CSVs; skip items you have not generated         |
+| `committed`      | only the shipped CSVs                                         |
 
 Under `auto` you can regenerate one experiment and still render everything; the
 closing summary lists which CSVs fell back.
@@ -202,7 +186,6 @@ closing summary lists which CSVs fell back.
   and CSV is produced by the run.
 - Table 6 is wall-clock, so it reflects the machine that ran it. Use `--jobs 1`
   for numbers comparable to the paper's single-core measurement.
-- Table 8 (the alpha/beta sensitivity sweep) is not covered by this artifact.
 
 Please contact the authors with ANY issues that arise and we will be glad to
 help.

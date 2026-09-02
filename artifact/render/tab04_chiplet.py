@@ -11,7 +11,8 @@ import numpy as np
 import pandas as pd
 
 import paper_values as pv
-from common import METRICS, banner, load_pairwise_summary, saved, table_dir
+from common import (METRICS, banner, load_pairwise_summary, saved, table_dir,
+                    warn_partial)
 from csv_sources import resolve
 
 BENCHMARKS = [("heavy_hexagon", 81), ("heavy_hexagon", 121), ("ibm_flamingo", 256)]
@@ -81,6 +82,7 @@ def run(args):
     render(df)
     print("  Flamingo trades SWAPs and depth for latency and error "
           "to avoid the 7.4x inter-chip penalty.")
+    warn_partial(df, "topology", "qubits")
 
     out = table_dir("tab04") / "table04_chiplet.csv"
     df.to_csv(out, index=False)

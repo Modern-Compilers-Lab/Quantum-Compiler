@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 
 import paper_values as pv
-from common import METRICS, banner, saved, table_dir
+from common import METRICS, banner, saved, table_dir, warn_partial
 from csv_sources import resolve
 
 WIDTHS = [81, 121]
@@ -91,6 +91,7 @@ def run(args):
     render(per_width, widths)
     print("\n  Baseline (i) Recon = reconciliation passes only.   "
           "S=SWAPs D=Depth L=Latency E=Error")
+    warn_partial(pd.DataFrame(rows), "qubits", "config")
 
     out = table_dir("tab07") / "table07_ablation.csv"
     pd.DataFrame(rows).to_csv(out, index=False)
