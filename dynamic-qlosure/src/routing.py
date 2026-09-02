@@ -12,8 +12,26 @@ from src.token_swapping_rust import solve_token_swapping
 from typing import List, Tuple, Dict, Any, Optional
 
 
+# Ablation configurations (Sec. 7.6.2 / Fig. 10):
+#   1 = distance only, 2 = + error, 3 = + depth rate, 4 = + loop-entry remap
+ABLATION_CONFIGS = {
+    1: dict(scorer="distance", remap=False),
+    2: dict(scorer="error",    remap=False),
+    3: dict(scorer="depth",    remap=False),
+    4: dict(scorer="depth",    remap=True),
+}
+
+
 class Qlosure():
-    def __init__(self, backend: QuantumBackend, with_circuit=True,decay_parameter=None,seed=42) -> None:
+    def __init__(self, backend: QuantumBackend, with_circuit=True,decay_parameter=None,seed=42,
+                 ablation=None) -> None:
+        # ablation=None is the full method
+        if ablation is not None and ablation not in ABLATION_CONFIGS:
+            raise ValueError(f"ablation must be one of {sorted(ABLATION_CONFIGS)} or None")
+        self.ablation = ablation
+        cfg = ABLATION_CONFIGS[ablation] if ablation else dict(scorer="depth", remap=True)
+        self.scorer = cfg["scorer"]
+        self.remap = cfg["remap"]
         self.backend_config = backend
         self.backend_connections = backend.connections
         self.backend = backend.graph
@@ -292,8 +310,8 @@ class Qlosure():
             # # used one  
             # score = dynamiq_poly_heuristic(self.front_layer, self.extended_layer, temp_mapping_dict,
             #                                     self.distance_matrix, self.node_data, self.decay_parameter, self.dag_dependencies_count, extended_layer_index, swap_gate,qubit_props=self.qubit_props)
-            score = new_qlosure_poly_heuristic(self.front_layer, self.extended_layer, temp_mapping_dict,
-                            self.distance_matrix, self.node_data, self.decay_parameter, self.dag_dependencies_count, extended_layer_index, swap_gate,qubit_props=self.qubit_props)
+            # # score = new_qlosure_poly_heuristic(self.front_layer, self.extended_layer, temp_mapping_dict,
+            #                 self.distance_matrix, self.node_data, self.decay_parameter, self.dag_dependencies_count, extended_layer_index, swap_gate,qubit_props=self.qubit_props)
             
 
 
@@ -311,8 +329,15 @@ class Qlosure():
             #                                     self.distance_matrix, self.node_data, self.decay_parameter, self.dag_dependencies_count, extended_layer_index, swap_gate,qubit_props=self.qubit_props,lambda_hot=1, alpha_usage=1, beta_error=0)
             
             # depth rate + error
-            # score = depth_poly_heuristic(self.front_layer, self.extended_layer, temp_mapping_dict,
-            #                                     self.distance_matrix, self.node_data, self.decay_parameter, self.dag_dependencies_count, extended_layer_index, swap_gate,qubit_props=self.qubit_props,lambda_hot=1, alpha_usage=1, beta_error=1)
+            if self.scorer == "distance":
+                score = distance_poly_heuristic(self.front_layer, self.extended_layer, temp_mapping_dict,
+                                                self.distance_matrix, self.node_data, self.decay_parameter, self.dag_dependencies_count, extended_layer_index, swap_gate)
+            elif self.scorer == "error":
+                score = new_qlosure_poly_heuristic(self.front_layer, self.extended_layer, temp_mapping_dict,
+                                                self.distance_matrix, self.node_data, self.decay_parameter, self.dag_dependencies_count, extended_layer_index, swap_gate,qubit_props=self.qubit_props,lambda_hot=1, alpha_usage=1, beta_error=1)
+            else:
+                score = depth_poly_heuristic(self.front_layer, self.extended_layer, temp_mapping_dict,
+                                                self.distance_matrix, self.node_data, self.decay_parameter, self.dag_dependencies_count, extended_layer_index, swap_gate,qubit_props=self.qubit_props,lambda_hot=1, alpha_usage=1, beta_error=1)
             
 
 
@@ -370,24 +395,26 @@ class Qlosure():
         loop_dag['node_data'] = loop_dag['node_data'] | dag['node_data']
 
         # ---- Pass 1: find a good entry mapping for the loop body
-        qlosure1 = Qlosure(self.backend_config, with_circuit=self.with_circuit)
+        qlosure1 = Qlosure(self.backend_config, with_circuit=self.with_circuit,
+                           ablation=self.ablation)
 
 
         # ------- uncomment this for mapping -------------
         # first pass to generate a good initial mapping
         #@TODO : Make num iter = 3
 
-        # --------- comment this ----------------
-        good_initial_mapping = copy.deepcopy(self.mapping_dict)
-        before_loop_swaps = []
-        # -------------------------------------
-        swap_count, depth, good_initial_mapping = qlosure1.run(loop_dag, loop_dag2q, heuristic_method="Qlosure",
-                                                            initial_mapping_method="custom", initial_mapping=self.mapping_dict, num_iter=3)
-        _, _, before_loop_swaps = solve_token_swapping(
-            self.backend_connections,
-            self.mapping_dict,
-            good_initial_mapping,
-        )
+        if self.remap:
+            swap_count, depth, good_initial_mapping = qlosure1.run(loop_dag, loop_dag2q, heuristic_method="Qlosure",
+                                                                initial_mapping_method="custom", initial_mapping=self.mapping_dict, num_iter=3)
+            _, _, before_loop_swaps = solve_token_swapping(
+                self.backend_connections,
+                self.mapping_dict,
+                good_initial_mapping,
+            )
+        else:
+            # no entry remapping: enter the loop on the current mapping
+            good_initial_mapping = copy.deepcopy(self.mapping_dict)
+            before_loop_swaps = []
 
         # ---- BEFORE-LOOP reconciliation: current -> good_initial_mapping
         for (p0, p1) in before_loop_swaps:
@@ -405,7 +432,8 @@ class Qlosure():
 
         # ---- Pass 2: compile the loop body from good_initial_mapping
         # qlosure2 = Qlosure(self.backend_config, with_circuit=self.with_circuit,decay_parameter=self.decay_parameter)
-        qlosure2 = Qlosure(self.backend_config, with_circuit=self.with_circuit)
+        qlosure2 = Qlosure(self.backend_config, with_circuit=self.with_circuit,
+                           ablation=self.ablation)
         swap_count, depth, good_initial_mapping = qlosure2.run(loop_dag, loop_dag2q, heuristic_method="Qlosure",
                                                                initial_mapping_method="custom", initial_mapping=good_initial_mapping)
         after_loop_swaps = []
@@ -478,7 +506,8 @@ class Qlosure():
             dag_block['node_data'] = dag_block['node_data'] | dag['node_data']
 
             qlosure = Qlosure(self.backend_config,
-                              with_circuit=self.with_circuit)
+                              with_circuit=self.with_circuit,
+                              ablation=self.ablation)
             swap_count, depth, good_initial_mapping = qlosure.run(
                 dag_block, dag_block2q, heuristic_method="Qlosure",
                 initial_mapping_method="custom", initial_mapping=initial_mapping)

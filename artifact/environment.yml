@@ -1,0 +1,28 @@
+# Environment for the DynamiQ reproduction artifact.
+#
+#   conda env create -f artifact/environment.yml
+#   conda activate dynamiq-artifact
+
+name: dynamiq-artifact
+
+channels:
+  - conda-forge
+
+dependencies:
+  - python=3.13.1
+  - pip=25.2
+
+  - pip:
+      - qiskit==2.3.0
+      - qiskit-qasm3-import==0.6.0
+      - rustworkx==0.16.0
+      - numpy==2.3.2
+      - scipy==1.16.1
+      - networkx==3.5
+      - symengine==0.13.0
+      - pandas==2.2.3
+      - matplotlib==3.10.5
+      - tqdm==4.67.1
+
+      # only needed to rebuild the surface-code benchmarks
+      # - stim==1.15.0

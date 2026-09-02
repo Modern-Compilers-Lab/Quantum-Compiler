@@ -73,3 +73,6 @@ qlosure/results/
 
 dynamic-qlosure/results/
 dynamic-qlosure/sabre_results/
+# artifact
+artifact/output/
+dynamic-qlosure/results_authors_backup/

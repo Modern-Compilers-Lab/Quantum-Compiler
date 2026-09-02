@@ -347,14 +347,16 @@ def depth_poly_heuristic(
 def depth_poly_heuristic(
     front_layer, extended_layer, mapping, distance_matrix, node_data,
     decay_parameter, deps_count, extended_layer_index, gate,
-    qubit_props,  # kept for API compatibility; not used in this heuristic
+    qubit_props,
     with_closure_depth=True, with_layer_factor=True,  # kept; not used
-    lambda_hot=0.5, alpha_usage=1.0, beta_error=1.0,  # kept; not used
+    lambda_hot=0.5, alpha_usage=1.0, beta_error=1.0,  # alpha_usage kept; not used
 ):
     """
-    New heuristic using layered, dependency-weighted distances and a depth-based tie-breaker,
-    while keeping the original function signature.
+    Layered, dependency-weighted distances with a depth-based tie-breaker.
+    Pair distances are scaled by an error multiplier and a hotspot multiplier;
+    set beta_error or lambda_hot to 0 to disable either.
     """
+    from collections import Counter
 
     def _pair_error(q0, q1):
         """Return two-qubit error for physical pair (q0,q1)."""
@@ -363,6 +365,20 @@ def depth_poly_heuristic(
         if e01 is not None and e10 is not None:
             return 0.5 * (e01 + e10)
         return e01 or e10 or 0.0
+
+    # hotspot usage density over the lookahead window
+    usage = Counter()
+    if lambda_hot > 0.0:
+        for layer_ in (front_layer, extended_layer):
+            for g in layer_:
+                nd = node_data[g]
+                if nd.get("is_control_flow"):
+                    continue
+                for q1_, q2_ in nd["coupled_qubits_accessed"]:
+                    usage[mapping[q1_]] += 1
+                    usage[mapping[q2_]] += 1
+    usage01 = _scale01(usage)
+
     # ------------------------------
     # 0) Build a "layers" structure from the existing inputs
     # ------------------------------
@@ -465,10 +481,10 @@ def depth_poly_heuristic(
             deps = deps_count[g] if with_closure_depth else 0
             gate_weight = deps + 1
 
-            d = distance_matrix[P1][P2] 
-            # multiply by error rate 
+            d = distance_matrix[P1][P2]
             err = _pair_error(P1, P2)
-            d *= (1.0 + beta_error * err)
+            hot = 1.0 + lambda_hot * (usage01[P1] + usage01[P2]) * 0.5
+            d *= (1.0 + beta_error * err) * hot
 
             weighted_distances.append(gate_weight * d)
             per_gate_weights.append(gate_weight)
